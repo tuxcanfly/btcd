@@ -107,7 +107,7 @@ var rpcHandlersBeforeInit = map[string]commandHandler{
 	"getpeerinfo":          handleGetPeerInfo,
 	"getrawmempool":        handleGetRawMempool,
 	"getrawtransaction":    handleGetRawTransaction,
-	"gettxout":             handleUnimplemented,
+	"gettxout":             handleGetTxOut,
 	"getwork":              handleGetWork,
 	"help":                 handleHelp,
 	"ping":                 handlePing,
@@ -1885,6 +1885,85 @@ func handleGetWorkSubmission(s *rpcServer, hexData string) (interface{}, error) 
 	blockSha, _ := block.Sha()
 	rpcsLog.Infof("Block submitted via getwork accepted: %s", blockSha)
 	return true, nil
+}
+
+// handleGetTxOut implements the gettxout command.
+func handleGetTxOut(s *rpcServer, cmd btcjson.Cmd, closeChan <-chan struct{}) (interface{}, error) {
+	c := cmd.(*btcjson.GetTxOutCmd)
+
+	// Convert the provided transaction hash hex to a ShaHash.
+	txSha, err := btcwire.NewShaHashFromStr(c.Txid)
+	if err != nil {
+		rpcsLog.Errorf("Error generating sha: %v", err)
+		return nil, btcjson.Error{
+			Code:    btcjson.ErrBlockNotFound.Code,
+			Message: "Parameter 1 must be a hexaecimal string",
+		}
+	}
+
+	var mtx *btcwire.MsgTx
+	var blksha *btcwire.ShaHash
+	var blk *btcutil.Block
+	var maxidx int64
+	var confirmations int64
+	var isCoinbase bool
+
+	if c.IncludeMempool {
+		tx, err := s.server.txMemPool.FetchTransaction(txSha)
+		if err != nil {
+			return nil, err
+		}
+		mtx = tx.MsgTx()
+	} else {
+		txList, err := s.server.db.FetchTxBySha(txSha)
+		if err != nil {
+			rpcsLog.Errorf("Error fetching tx: %v", err)
+			return nil, btcjson.ErrNoTxInfo
+		}
+		if len(txList) == 0 {
+			return nil, btcjson.ErrNoTxInfo
+		}
+
+		lastTx := len(txList) - 1
+		mtx = txList[lastTx].Tx
+
+		blksha = txList[lastTx].BlkSha
+
+		blk, err = s.server.db.FetchBlockBySha(blksha)
+		idx := blk.Height()
+		if err != nil {
+			rpcsLog.Errorf("Error fetching sha: %v", err)
+			return nil, btcjson.ErrBlockNotFound
+		}
+
+		_, maxidx, err = s.server.db.NewestSha()
+		if err != nil {
+			rpcsLog.Errorf("Cannot get newest sha: %v", err)
+			return nil, btcjson.ErrNoNewestBlockInfo
+		}
+		blockHeader := &blk.MsgBlock().Header
+		confirmations = int64(1 + maxidx - idx)
+	}
+
+	if c.Output >= 0 && c.Output < len(mtx.TxOut) {
+		txo := mtx.TxOut[c.Output]
+	} else {
+		return nil, btcjson.ErrInvalidParams
+	}
+
+	if len(mtx.TxIn) == 0 {
+		isCoinbase = true
+	}
+
+	result := &btcjson.GetTxOutResult{
+		BestBlock:     blockHeader,
+		Confirmations: confirmations,
+		Value:         float64(txo.Value),
+		ScriptPubKey:  hex.EncodeToString(txo.PkScript),
+		Version:       blockHeader.Version,
+		Coinbase:      isCoinbase,
+	}
+	return result, nil
 }
 
 // handleGetWork implements the getwork command.
