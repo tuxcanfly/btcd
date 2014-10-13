@@ -95,7 +95,7 @@ var commandHandlers = map[string]*handlerData{
 	"keypoolrefill":         {0, 1, displayGeneric, []conversionHandler{toInt}, makeKeyPoolRefill, "[newsize]"},
 	"listaccounts":          {0, 1, displayJSONDump, []conversionHandler{toInt}, makeListAccounts, "[minconf=1]"},
 	"listaddressgroupings":  {0, 0, displayJSONDump, nil, makeListAddressGroupings, ""},
-	"listreceivedbyaccount": {0, 2, displayJSONDump, []conversionHandler{toInt, toBool}, makeListReceivedByAccount, "[minconf] [includeempty]"},
+	"listreceivedbyaccount": {1, 2, displayJSONDump, []conversionHandler{nil, toInt, toBool}, makeListReceivedByAccount, "<account> [minconf] [includeempty]"},
 	"listreceivedbyaddress": {0, 2, displayJSONDump, []conversionHandler{toInt, toBool}, makeListReceivedByAddress, "[minconf] [includeempty]"},
 	"listlockunspent":       {0, 0, displayJSONDump, nil, makeListLockUnspent, ""},
 	"listsinceblock":        {0, 2, displayJSONDump, []conversionHandler{nil, toInt}, makeListSinceBlock, "[blockhash] [minconf=10]"},
@@ -618,13 +618,13 @@ func makeListAddressGroupings(args []interface{}) (btcjson.Cmd, error) {
 // makeListReceivedByAccount generates the cmd structure for listreceivedbyaccount commands.
 func makeListReceivedByAccount(args []interface{}) (btcjson.Cmd, error) {
 	var optargs = make([]interface{}, 0, 2)
-	if len(args) > 0 {
-		optargs = append(optargs, args[0].(int))
-	}
 	if len(args) > 1 {
-		optargs = append(optargs, args[1].(bool))
+		optargs = append(optargs, args[1].(int))
 	}
-	return btcjson.NewListReceivedByAccountCmd("btcctl", optargs...)
+	if len(args) > 2 {
+		optargs = append(optargs, args[2].(bool))
+	}
+	return btcjson.NewListReceivedByAccountCmd("btcctl", args[0].(string), optargs...)
 }
 
 // makeListReceivedByAddress generates the cmd structure for listreceivedbyaddress commands.
