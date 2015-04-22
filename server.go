@@ -411,6 +411,7 @@ type addNodeMsg struct {
 }
 
 type delNodeMsg struct {
+	addr  string
 	cmp   func(*peer) bool
 	reply chan error
 }
@@ -491,6 +492,23 @@ func (s *server) handleQuery(querymsg interface{}, state *peerState) {
 		msg.reply <- infos
 
 	case addNodeMsg:
+		// XXX(oga) duplicate oneshots?
+		if msg.permanent {
+			for e := state.persistentPeers.Front(); e != nil; e = e.Next() {
+				peer := e.Value.(*peer)
+				if peer.addr == msg.addr {
+					msg.reply <- errors.New("peer already connected")
+					return
+				}
+			}
+		}
+		// TODO(oga) if too many, nuke a non-perm peer.
+		if s.handleAddPeerMsg(state,
+			newOutboundPeer(s, msg.addr, msg.permanent, 0)) {
+			msg.reply <- nil
+		} else {
+			msg.reply <- errors.New("failed to add peer")
+		}
 	case connectNodeMsg:
 		// XXX(oga) duplicate oneshots?
 		for e := state.persistentPeers.Front(); e != nil; e = e.Next() {
@@ -514,6 +532,27 @@ func (s *server) handleQuery(querymsg interface{}, state *peerState) {
 		}
 
 	case delNodeMsg:
+		found := false
+		for e := state.persistentPeers.Front(); e != nil; e = e.Next() {
+			peer := e.Value.(*peer)
+			if peer.addr == msg.addr {
+				// Keep group counts ok since we remove from
+				// the list now.
+				state.outboundGroups[addrmgr.GroupKey(peer.na)]--
+				// This is ok because we are not continuing
+				// to iterate so won't corrupt the loop.
+				state.persistentPeers.Remove(e)
+				peer.Disconnect()
+				found = true
+				break
+			}
+		}
+
+		if found {
+			msg.reply <- nil
+		} else {
+			msg.reply <- errors.New("peer not found")
+		}
 	case removeNodeMsg:
 		found := disconnectPeer(state.persistentPeers, msg.cmp, func(p *peer) {
 			// Keep group counts ok since we remove from
