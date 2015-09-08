@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/addrmgr"
-
 	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/database"
+	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btclog"
@@ -118,6 +118,7 @@ func useLogger(subsystemID string, logger btclog.Logger) {
 
 	case "PEER":
 		peerLog = logger
+		peer.UseLogger(logger)
 
 	case "RPCS":
 		rpcsLog = logger
