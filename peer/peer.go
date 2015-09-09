@@ -1991,14 +1991,14 @@ func NewOutboundPeer(cfg *Config, nonce uint64, na *wire.NetAddress) *Peer {
 }
 
 // Connect uses the given conn to connect to the peer.
-func (p *Peer) Connect(conn net.Conn) {
+func (p *Peer) Connect(conn net.Conn) error {
 	p.conn = conn
 	p.timeConnected = time.Now()
 
 	// Connection was successful so log it and start peer.
 	log.Debugf("Connected to %s", p.conn.RemoteAddr())
 	atomic.AddInt32(&p.connected, 1)
-	p.Start()
+	return p.Start()
 }
 
 // LogError makes sure that we only log errors loudly on user peers.

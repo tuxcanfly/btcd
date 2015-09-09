@@ -1486,7 +1486,9 @@ func (s *server) establishConn(p *peer.Peer) error {
 	if err != nil {
 		return err
 	}
-	p.Connect(conn)
+	if err := p.Connect(conn); err != nil {
+		return err
+	}
 	s.addrManager.Attempt(p.NA())
 	return nil
 }

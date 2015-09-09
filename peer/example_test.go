@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strconv"
 	"time"
 
 	"github.com/btcsuite/btcd/addrmgr"
@@ -100,17 +99,7 @@ func Example_peerConnection() {
 	}
 
 	// Get a network address for use with the outbound peer.
-	host, portStr, err := net.SplitHostPort("127.0.0.1:8333")
-	if err != nil {
-		fmt.Printf("SplitHostPort: error %v\n", err)
-		return
-	}
-	port, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		fmt.Printf("ParseUint: error %v\n", err)
-		return
-	}
-	na, err := addrMgr.HostToNetAddress(host, uint16(port), 0)
+	na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), wire.SFNodeNetwork)
 	if err != nil {
 		fmt.Printf("HostToNetAddress: error %v\n", err)
 		return
@@ -130,7 +119,9 @@ func Example_peerConnection() {
 		if err != nil {
 			fmt.Printf("btcDial: error %v\n", err)
 		}
-		p2.Connect(conn)
+		if err := p2.Connect(conn); err != nil {
+			fmt.Printf("Connect: error %v\n", err)
+		}
 	}()
 	p2.AddVersionMsgListener("handleVersionMsg", func(p *peer.Peer, msg *wire.MsgVersion) {
 		fmt.Println("outbound: received version")

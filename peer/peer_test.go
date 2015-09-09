@@ -5,9 +5,10 @@
 package peer_test
 
 import (
+	"bytes"
+	"errors"
 	"io"
 	"net"
-	"strconv"
 	"testing"
 	"time"
 
@@ -99,24 +100,16 @@ func TestPeerConnection(t *testing.T) {
 		return
 	}
 
-	host, portStr, err := net.SplitHostPort("127.0.0.1:8333")
-	if err != nil {
-		t.Errorf("SplitHostPort: error %v\n", err)
-		return
-	}
-
-	port, err := strconv.ParseUint(portStr, 10, 16)
-	if err != nil {
-		t.Errorf("ParseUint: error %v\n", err)
-		return
-	}
-	na, err := addrMgr.HostToNetAddress(host, uint16(port), 0)
+	na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), wire.SFNodeNetwork)
 	if err != nil {
 		t.Errorf("HostToNetAddress: error %v\n", err)
 		return
 	}
 	p2 := peer.NewOutboundPeer(peerCfg, 1, na)
-	p2.Connect(c2)
+	if err := p2.Connect(c2); err != nil {
+		t.Errorf("Connect: error %v\n", err)
+		return
+	}
 
 	time.Sleep(time.Second)
 
@@ -218,4 +211,102 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool) {
 		return
 	}
 
+}
+
+// TestPeer tests that the peer works as expected.
+func TestOutboundPeer(t *testing.T) {
+	// Use a mock NewestBlock func to test errs
+	var errBlockNotFound = errors.New("newest block not found")
+	var mockNewestSha = func() (*wire.ShaHash, int32, error) {
+		return nil, 0, errBlockNotFound
+	}
+
+	peerCfg := &peer.Config{
+		NewestBlock:      mockNewestSha,
+		BestLocalAddress: addrMgr.GetBestLocalAddress,
+		UserAgentName:    "peer",
+		UserAgentVersion: "1.0",
+		Net:              wire.MainNet,
+		Services:         wire.SFNodeNetwork,
+	}
+
+	var b bytes.Buffer
+	c := &conn{raddr: "127.0.0.1:8333", Writer: &b, Reader: &b}
+
+	na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), wire.SFNodeNetwork)
+	if err != nil {
+		t.Errorf("HostToNetAddress: error %v\n", err)
+		return
+	}
+	p := peer.NewOutboundPeer(peerCfg, 1, na)
+
+	if p.NA() != na {
+		t.Errorf("TestOutboundPeer: wrong NA - got %v, want %v", p.NA(), na)
+		return
+	}
+
+	// Test Connect err
+	wantErr := errBlockNotFound
+	if err := p.Connect(c); err != wantErr {
+		t.Errorf("Connect: expected err %v, got %v\n", wantErr, err)
+		return
+	}
+	// Test already started
+	if err := p.Start(); err != nil {
+		t.Errorf("Start: unexpected err %v\n", err)
+		return
+	}
+
+	// Test Queue Inv
+	fakeBlockHash := &wire.ShaHash{0x00, 0x01}
+	fakeInv := wire.NewInvVect(wire.InvTypeBlock, fakeBlockHash)
+	p.QueueInventory(fakeInv)
+	p.AddKnownInventory(fakeInv)
+	p.QueueInventory(fakeInv)
+
+	// Test Queue Message
+	fakeMsg := wire.NewMsgVerAck()
+	p.QueueMessage(fakeMsg, nil)
+	done := make(chan struct{})
+	p.QueueMessage(fakeMsg, done)
+	p.Shutdown()
+
+	// Reset NewestBlock to normal Start
+	peerCfg.NewestBlock = newestSha
+	p1 := peer.NewOutboundPeer(peerCfg, 1, na)
+	if err := p1.Connect(c); err != nil {
+		t.Errorf("Connect: unexpected err %v\n", err)
+		return
+	}
+
+	// Test update latest block
+	latestBlockSha, err := wire.NewShaHashFromStr("1a63f9cdff1752e6375c8c76e543a71d239e1a2e5c6db1aa679")
+	if err != nil {
+		t.Errorf("NewShaHashFromStr: unexpected err %v\n", err)
+		return
+	}
+	p1.UpdateLastAnnouncedBlock(latestBlockSha)
+	p1.UpdateLastBlockHeight(234440)
+
+	// Test Queue Inv after connection
+	p1.QueueInventory(fakeInv)
+	p1.Shutdown()
+
+	// Test regression
+	peerCfg.RegressionTest = true
+	p2 := peer.NewOutboundPeer(peerCfg, 1, na)
+	if err := p2.Connect(c); err != nil {
+		t.Errorf("Connect: unexpected err %v\n", err)
+		return
+	}
+
+	// Test Queue Messages
+	p2.QueueMessage(wire.NewMsgGetAddr(), nil)
+	p2.QueueMessage(wire.NewMsgPing(1), nil)
+	p2.QueueMessage(wire.NewMsgMemPool(), nil)
+	p2.QueueMessage(wire.NewMsgGetData(), nil)
+	p2.QueueMessage(wire.NewMsgGetHeaders(), done)
+
+	time.Sleep(time.Second)
+	p2.Shutdown()
 }
