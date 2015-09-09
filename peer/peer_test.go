@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/addrmgr"
-	"github.com/btcsuite/btcd/blockchain"
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 )
@@ -77,132 +76,6 @@ func pipe(c1, c2 *conn) (*conn, *conn) {
 // It is global so as to be accessible from mock listeners.
 var addrMgr = addrmgr.New("test", lookupFunc)
 
-var gotHandlers = make(chan string, 11)
-
-var wantHandlers = map[string]struct{}{
-	"handleVersionMsg":    struct{}{},
-	"handleMemPoolMsg":    struct{}{},
-	"handleTxMsg":         struct{}{},
-	"handleBlockMsg":      struct{}{},
-	"handleInvMsg":        struct{}{},
-	"handleHeadersMsg":    struct{}{},
-	"handleGetDataMsg":    struct{}{},
-	"handleGetBlocksMsg":  struct{}{},
-	"handleGetHeadersMsg": struct{}{},
-	"handleGetAddrMsg":    struct{}{},
-	"handleAddrMsg":       struct{}{},
-}
-
-func handleVersionMsg(p *peer.Peer, msg *wire.MsgVersion) {
-	p.QueueMessage(wire.NewMsgGetAddr(), nil)
-	gotHandlers <- "handleVersionMsg"
-}
-
-func handleMemPoolMsg(p *peer.Peer, msg *wire.MsgMemPool) {
-	gotHandlers <- "handleMemPoolMsg"
-}
-
-func handleTxMsg(p *peer.Peer, msg *wire.MsgTx) {
-	gotHandlers <- "handleTxMsg"
-}
-
-func handleBlockMsg(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
-	sha, height, _ := newestSha()
-	p.UpdateLastAnnouncedBlock(sha)
-	p.UpdateLastBlockHeight(height)
-
-	blockSha := msg.BlockSha()
-	locator := blockchain.BlockLocator([]*wire.ShaHash{&blockSha})
-	err := p.PushGetBlocksMsg(locator, &zeroHash)
-	if err != nil {
-		p.LogError("Failed to send getblocks message to peer %s: %v",
-			p.Addr(), err)
-		p.Disconnect()
-		return
-	}
-	gotHandlers <- "handleBlockMsg"
-}
-
-func handleInvMsg(p *peer.Peer, msg *wire.MsgInv) {
-	gdmsg := wire.NewMsgGetData()
-	p.QueueMessage(gdmsg, nil)
-	for _, iv := range msg.InvList {
-		p.AddKnownInventory(iv)
-	}
-	gotHandlers <- "handleInvMsg"
-}
-
-func handleHeadersMsg(p *peer.Peer, msg *wire.MsgHeaders) {
-	locator := blockchain.BlockLocator([]*wire.ShaHash{})
-	p.PushGetHeadersMsg(locator, &zeroHash)
-	gotHandlers <- "handleHeadersMsg"
-}
-
-func handleGetDataMsg(p *peer.Peer, msg *wire.MsgGetData) {
-	notFound := wire.NewMsgNotFound()
-	p.QueueMessage(notFound, nil)
-	gotHandlers <- "handleGetDataMsg"
-}
-
-func handleGetBlocksMsg(p *peer.Peer, msg *wire.MsgGetBlocks) {
-	invMsg := wire.NewMsgInv()
-	p.QueueMessage(invMsg, nil)
-	gotHandlers <- "handleGetBlocksMsg"
-}
-
-func handleGetHeadersMsg(p *peer.Peer, msg *wire.MsgGetHeaders) {
-	headersMsg := wire.NewMsgHeaders()
-	p.QueueMessage(headersMsg, nil)
-	gotHandlers <- "handleGetHeadersMsg"
-}
-
-func handleGetAddrMsg(p *peer.Peer, msg *wire.MsgGetAddr) {
-	addrCache := addrMgr.AddressCache()
-	err := p.PushAddrMsg(addrCache)
-	if err != nil {
-		p.LogError("Can't push address message to %s: %v", p, err)
-		p.Disconnect()
-		return
-	}
-	gotHandlers <- "handleGetAddrMsg"
-}
-
-func handleAddrMsg(p *peer.Peer, msg *wire.MsgAddr) {
-	addrMgr.AddAddresses(msg.AddrList, p.NA())
-	gotHandlers <- "handleAddrMsg"
-}
-
-// registerListeners registers listeners on peer messages to mimic the standard
-// bitcoin protocol.
-func registerListeners(p *peer.Peer) {
-	p.AddVersionMsgListener("handleVersionMsg", handleVersionMsg)
-	p.AddMemPoolMsgListener("handleMemPoolMsg", handleMemPoolMsg)
-	p.AddTxMsgListener("handleTxMsg", handleTxMsg)
-	p.AddBlockMsgListener("handleBlockMsg", handleBlockMsg)
-	p.AddInvMsgListener("handleInvMsg", handleInvMsg)
-	p.AddHeadersMsgListener("handleHeadersMsg", handleHeadersMsg)
-	p.AddGetDataMsgListener("handleGetDataMsg", handleGetDataMsg)
-	p.AddGetBlocksMsgListener("handleGetBlocksMsg", handleGetBlocksMsg)
-	p.AddGetHeadersMsgListener("handleGetHeadersMsg", handleGetHeadersMsg)
-	p.AddGetAddrMsgListener("handleGetAddrMsg", handleGetAddrMsg)
-	p.AddAddrMsgListener("handleAddrMsg", handleAddrMsg)
-}
-
-// removeListeners removes listeners registered with a peer.
-func removeListeners(p *peer.Peer) {
-	p.RemoveVersionMsgListener("handleVersionMsg")
-	p.RemoveMemPoolMsgListener("handleMemPoolMsg")
-	p.RemoveTxMsgListener("handleTxMsg")
-	p.RemoveBlockMsgListener("handleBlockMsg")
-	p.RemoveInvMsgListener("handleInvMsg")
-	p.RemoveHeadersMsgListener("handleHeadersMsg")
-	p.RemoveGetDataMsgListener("handleGetDataMsg")
-	p.RemoveGetBlocksMsgListener("handleGetBlocksMsg")
-	p.RemoveGetHeadersMsgListener("handleGetHeadersMsg")
-	p.RemoveGetAddrMsgListener("handleGetAddrMsg")
-	p.RemoveAddrMsgListener("handleAddrMsg")
-}
-
 // TestPeerConnection tests the activity between inbound and outbound peers
 // using a mock connection.
 func TestPeerConnection(t *testing.T) {
@@ -220,7 +93,6 @@ func TestPeerConnection(t *testing.T) {
 	)
 
 	p1 := peer.NewInboundPeer(peerCfg, 0, c1)
-	registerListeners(p1)
 	err := p1.Start()
 	if err != nil {
 		t.Errorf("Start: error %v", err)
@@ -246,55 +118,7 @@ func TestPeerConnection(t *testing.T) {
 	p2 := peer.NewOutboundPeer(peerCfg, 1, na)
 	p2.Connect(c2)
 
-	locator := blockchain.BlockLocator([]*wire.ShaHash{})
-	p2.PushGetBlocksMsg(locator, &zeroHash)
-	p2.PushGetHeadersMsg(locator, &zeroHash)
-	p2.PushRejectMsg(wire.CmdBlock, wire.RejectInvalid, "test reject", &zeroHash, false)
-
-	fakeHeader := wire.NewBlockHeader(&zeroHash, &zeroHash, 1, 1)
-	msgBlock := wire.NewMsgBlock(fakeHeader)
-
-	// Test protocol messages
-	p2.QueueMessage(wire.NewMsgPing(uint64(p1.ID())), nil)
-	p2.QueueMessage(wire.NewMsgGetAddr(), nil)
-	p2.QueueMessage(msgBlock, nil)
-	p2.QueueMessage(wire.NewMsgMemPool(), nil)
-	p2.QueueMessage(wire.NewMsgTx(), nil)
-	p2.QueueMessage(wire.NewMsgHeaders(), nil)
-	p2.QueueMessage(wire.NewMsgGetData(), nil)
-	p2.QueueMessage(wire.NewMsgGetBlocks(&zeroHash), nil)
-	p2.QueueMessage(wire.NewMsgGetHeaders(), nil)
-	p2.QueueMessage(wire.NewMsgAddr(), nil)
-
-	hash, _, err := newestSha()
-	if err == nil {
-		fakeInvMsg := wire.NewMsgInvSizeHint(1)
-		iv := wire.NewInvVect(wire.InvTypeBlock, hash)
-		fakeInvMsg.AddInvVect(iv)
-		p2.QueueMessage(fakeInvMsg, nil)
-	} else {
-		t.Errorf("newestSha: error %v\n", err)
-		return
-	}
-
-	// Test adding block inv
-	fakeInv := wire.NewInvVect(wire.InvTypeBlock, &zeroHash)
-	p2.QueueInventory(fakeInv)
-
-	removeListeners(p2)
-
-	// Test all handlers are called
-out:
-	for {
-		select {
-		case handler := <-gotHandlers:
-			delete(wantHandlers, handler)
-			if len(wantHandlers) == 0 {
-				break out
-			}
-		default:
-		}
-	}
+	time.Sleep(time.Second)
 
 	// Test peer flags and stats
 	testPeer(t, p1, true)
