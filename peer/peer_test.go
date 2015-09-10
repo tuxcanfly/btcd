@@ -315,7 +315,10 @@ func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
 		handler string
 		msg     wire.Message
 	}{
-		// TODO: test getaddr message
+		{
+			"handleGetAddr",
+			wire.NewMsgGetAddr(),
+		},
 		{
 			"handleAddr",
 			wire.NewMsgAddr(),
@@ -332,7 +335,10 @@ func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
 			"handleAlert",
 			wire.NewMsgAlert([]byte("payload"), []byte("signature")),
 		},
-		// TODO: test mempool message
+		{
+			"handleMemPool",
+			wire.NewMsgMemPool(),
+		},
 		{
 			"handleTx",
 			wire.NewMsgTx(),
@@ -369,7 +375,10 @@ func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
 			"handleFilterAddMsg",
 			wire.NewMsgFilterAdd([]byte{0x01}),
 		},
-		// TODO: test filterclear message
+		{
+			"handleFilterClearMsg",
+			wire.NewMsgFilterClear(),
+		},
 		{
 			"handleFilterLoadMsg",
 			wire.NewMsgFilterLoad([]byte{0x01}, 10, 0, wire.BloomUpdateNone),
@@ -472,9 +481,7 @@ func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
 		}
 
 		// Queue the message and wait until it's done
-		done := make(chan struct{})
-		p2.QueueMessage(test.msg, done)
-		<-done
+		p2.QueueMessage(test.msg, nil)
 		// Timeout in case something goes wrong
 		select {
 		case <-ok:
