@@ -118,9 +118,11 @@ func Example_peerConnection() {
 		conn, err := net.Dial("tcp", "127.0.0.1:8333")
 		if err != nil {
 			fmt.Printf("btcDial: error %v\n", err)
+			return
 		}
 		if err := p2.Connect(conn); err != nil {
 			fmt.Printf("Connect: error %v\n", err)
+			return
 		}
 	}()
 	p2.AddVersionMsgListener("handleVersionMsg", func(p *peer.Peer, msg *wire.MsgVersion) {

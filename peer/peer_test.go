@@ -7,6 +7,7 @@ package peer_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -111,11 +112,23 @@ func TestPeerConnection(t *testing.T) {
 		return
 	}
 
-	time.Sleep(time.Second)
+	// Wait until veracks are exchanged
+	ready := make(chan struct{}, 1)
+	p1.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
+		ready <- struct{}{}
+	})
+	p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
+		ready <- struct{}{}
+	})
+	<-ready
+	<-ready
 
 	// Test peer flags and stats
 	testPeer(t, p1, true)
 	testPeer(t, p2, false)
+
+	// Test listeners
+	testListeners(t, p1, p2)
 }
 
 // testPeer tests the given peer's flags and stats
@@ -210,7 +223,38 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool) {
 		t.Errorf("testPeer: wrong ID - got %v, want %v", stats.ID, wantID)
 		return
 	}
+}
 
+func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
+	tests := []struct {
+		handler string
+		f       func(string, func(*peer.Peer, *wire.MsgVersion))
+		msg     wire.Message
+	}{
+		{
+			"handleMsgVersion",
+			p1.AddVersionMsgListener,
+			wire.NewMsgVersion(p1.NA(), p2.NA(), 0, 234439),
+		},
+	}
+
+	t.Logf("Running %d tests", len(tests))
+	for i, test := range tests {
+		ok := make(chan struct{})
+		test.f(test.handler, func(*peer.Peer, *wire.MsgVersion) {
+			fmt.Printf("got\n")
+			ok <- struct{}{}
+		})
+		done := make(chan struct{})
+		p2.QueueMessage(test.msg, done)
+		<-done
+		select {
+		case <-ok:
+		case <-time.After(time.Second * 1):
+			t.Errorf("testListeners #%d: expected handler %s to be called", i, test.handler)
+			return
+		}
+	}
 }
 
 // TestPeer tests that the peer works as expected.
@@ -267,8 +311,9 @@ func TestOutboundPeer(t *testing.T) {
 	// Test Queue Message
 	fakeMsg := wire.NewMsgVerAck()
 	p.QueueMessage(fakeMsg, nil)
-	done := make(chan struct{})
+	done := make(chan struct{}, 5)
 	p.QueueMessage(fakeMsg, done)
+	<-done
 	p.Shutdown()
 
 	// Reset NewestBlock to normal Start
@@ -301,12 +346,11 @@ func TestOutboundPeer(t *testing.T) {
 	}
 
 	// Test Queue Messages
-	p2.QueueMessage(wire.NewMsgGetAddr(), nil)
-	p2.QueueMessage(wire.NewMsgPing(1), nil)
-	p2.QueueMessage(wire.NewMsgMemPool(), nil)
-	p2.QueueMessage(wire.NewMsgGetData(), nil)
+	p2.QueueMessage(wire.NewMsgGetAddr(), done)
+	p2.QueueMessage(wire.NewMsgPing(1), done)
+	p2.QueueMessage(wire.NewMsgMemPool(), done)
+	p2.QueueMessage(wire.NewMsgGetData(), done)
 	p2.QueueMessage(wire.NewMsgGetHeaders(), done)
 
-	time.Sleep(time.Second)
 	p2.Shutdown()
 }

@@ -283,6 +283,7 @@ type Peer struct {
 	filterClearMsgListeners map[string]func(*Peer, *wire.MsgFilterClear)
 	filterLoadMsgListeners  map[string]func(*Peer, *wire.MsgFilterLoad)
 	versionMsgListeners     map[string]func(*Peer, *wire.MsgVersion)
+	verackMsgListeners      map[string]func(*Peer, *wire.MsgVerAck)
 	rejectMsgListeners      map[string]func(*Peer, *wire.MsgReject)
 }
 
@@ -807,6 +808,24 @@ func (p *Peer) RemoveVersionMsgListener(key string) {
 	defer p.listenerMtx.Unlock()
 
 	delete(p.versionMsgListeners, key)
+}
+
+// AddVerAckMsgListener adds a listener which is invoked when a peer receives
+// a verack bitcoin message.
+func (p *Peer) AddVerAckMsgListener(key string, listener func(p *Peer, msg *wire.MsgVerAck)) {
+	p.listenerMtx.Lock()
+	defer p.listenerMtx.Unlock()
+
+	p.verackMsgListeners[key] = listener
+}
+
+// RemoveVerAckMsgListener removes the verack message listener with the given
+// key.
+func (p *Peer) RemoveVerAckMsgListener(key string) {
+	p.listenerMtx.Lock()
+	defer p.listenerMtx.Unlock()
+
+	delete(p.verackMsgListeners, key)
 }
 
 // AddGetAddrMsgListener adds a listener which is invoked when a peer receives
@@ -1426,6 +1445,13 @@ out:
 			p.verAckReceived = true
 			p.statsMtx.Unlock()
 
+			p.listenerMtx.Lock()
+			for key, listener := range p.verackMsgListeners {
+				log.Tracef("Running %s listener %s", key, p)
+				listener(p, msg)
+			}
+			p.listenerMtx.Unlock()
+
 		case *wire.MsgGetAddr:
 			p.listenerMtx.Lock()
 			for key, listener := range p.getAddrMsgListeners {
@@ -1966,6 +1992,7 @@ func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
 		filterClearMsgListeners: make(map[string]func(*Peer, *wire.MsgFilterClear)),
 		filterLoadMsgListeners:  make(map[string]func(*Peer, *wire.MsgFilterLoad)),
 		versionMsgListeners:     make(map[string]func(*Peer, *wire.MsgVersion)),
+		verackMsgListeners:      make(map[string]func(*Peer, *wire.MsgVerAck)),
 		rejectMsgListeners:      make(map[string]func(*Peer, *wire.MsgReject)),
 	}
 	return &p
