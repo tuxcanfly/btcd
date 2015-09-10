@@ -7,7 +7,6 @@ package peer_test
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"testing"
@@ -225,35 +224,202 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool) {
 	}
 }
 
+// testListeners tests that custom message listeners are working as expected.
 func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
 	tests := []struct {
 		handler string
-		f       func(string, func(*peer.Peer, *wire.MsgVersion))
 		msg     wire.Message
 	}{
+		// TODO: test getaddr message
 		{
-			"handleMsgVersion",
-			p1.AddVersionMsgListener,
-			wire.NewMsgVersion(p1.NA(), p2.NA(), 0, 234439),
+			"handleAddr",
+			wire.NewMsgAddr(),
+		},
+		{
+			"handlePing",
+			wire.NewMsgPing(42),
+		},
+		{
+			"handlePong",
+			wire.NewMsgPong(42),
+		},
+		{
+			"handleAlert",
+			wire.NewMsgAlert([]byte("payload"), []byte("signature")),
+		},
+		// TODO: test mempool message
+		{
+			"handleTx",
+			wire.NewMsgTx(),
+		},
+		{
+			"handleBlock",
+			wire.NewMsgBlock(wire.NewBlockHeader(&wire.ShaHash{}, &wire.ShaHash{}, 1, 1)),
+		},
+		{
+			"handleInv",
+			wire.NewMsgInv(),
+		},
+		{
+			"handleHeaders",
+			wire.NewMsgHeaders(),
+		},
+		{
+			"handleNotFound",
+			wire.NewMsgNotFound(),
+		},
+		{
+			"handleGetData",
+			wire.NewMsgGetData(),
+		},
+		{
+			"handleGetBlocks",
+			wire.NewMsgGetBlocks(&wire.ShaHash{}),
+		},
+		{
+			"handleGetHeaders",
+			wire.NewMsgGetHeaders(),
+		},
+		{
+			"handleFilterAddMsg",
+			wire.NewMsgFilterAdd([]byte{0x01}),
+		},
+		// TODO: test filterclear message
+		{
+			"handleFilterLoadMsg",
+			wire.NewMsgFilterLoad([]byte{0x01}, 10, 0, wire.BloomUpdateNone),
+		},
+		// only one version message is allowed
+		// only one verack message is allowed
+		{
+			"handleMsgReject",
+			wire.NewMsgReject("block", wire.RejectDuplicate, "dupe block"),
 		},
 	}
 
 	t.Logf("Running %d tests", len(tests))
 	for i, test := range tests {
+		// Chan to make sure the listener is fired
 		ok := make(chan struct{})
-		test.f(test.handler, func(*peer.Peer, *wire.MsgVersion) {
-			fmt.Printf("got\n")
-			ok <- struct{}{}
-		})
+
+		// Add listener and use chan to signal when it is called
+		switch test.msg.(type) {
+		case *wire.MsgGetAddr:
+			p1.AddGetAddrMsgListener(test.handler, func(*peer.Peer, *wire.MsgGetAddr) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgAddr:
+			p1.AddAddrMsgListener(test.handler, func(*peer.Peer, *wire.MsgAddr) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgPing:
+			p1.AddPingMsgListener(test.handler, func(*peer.Peer, *wire.MsgPing) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgPong:
+			p1.AddPongMsgListener(test.handler, func(*peer.Peer, *wire.MsgPong) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgAlert:
+			p1.AddAlertMsgListener(test.handler, func(*peer.Peer, *wire.MsgAlert) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgMemPool:
+			p1.AddMemPoolMsgListener(test.handler, func(*peer.Peer, *wire.MsgMemPool) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgTx:
+			p1.AddTxMsgListener(test.handler, func(*peer.Peer, *wire.MsgTx) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgBlock:
+			p1.AddBlockMsgListener(test.handler, func(*peer.Peer, *wire.MsgBlock, []byte) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgInv:
+			p1.AddInvMsgListener(test.handler, func(*peer.Peer, *wire.MsgInv) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgHeaders:
+			p1.AddHeadersMsgListener(test.handler, func(*peer.Peer, *wire.MsgHeaders) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgNotFound:
+			p1.AddNotFoundMsgListener(test.handler, func(*peer.Peer, *wire.MsgNotFound) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgGetData:
+			p1.AddGetDataMsgListener(test.handler, func(*peer.Peer, *wire.MsgGetData) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgGetBlocks:
+			p1.AddGetBlocksMsgListener(test.handler, func(*peer.Peer, *wire.MsgGetBlocks) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgGetHeaders:
+			p1.AddGetHeadersMsgListener(test.handler, func(*peer.Peer, *wire.MsgGetHeaders) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgFilterAdd:
+			p1.AddFilterAddMsgListener(test.handler, func(*peer.Peer, *wire.MsgFilterAdd) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgFilterClear:
+			p1.AddFilterClearMsgListener(test.handler, func(*peer.Peer, *wire.MsgFilterClear) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgFilterLoad:
+			p1.AddFilterLoadMsgListener(test.handler, func(*peer.Peer, *wire.MsgFilterLoad) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgVersion:
+			p1.AddVersionMsgListener(test.handler, func(*peer.Peer, *wire.MsgVersion) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgVerAck:
+			p1.AddVerAckMsgListener(test.handler, func(*peer.Peer, *wire.MsgVerAck) {
+				ok <- struct{}{}
+			})
+		case *wire.MsgReject:
+			p1.AddRejectMsgListener(test.handler, func(*peer.Peer, *wire.MsgReject) {
+				ok <- struct{}{}
+			})
+		}
+
+		// Queue the message and wait until it's done
 		done := make(chan struct{})
 		p2.QueueMessage(test.msg, done)
 		<-done
+		// Timeout in case something goes wrong
 		select {
 		case <-ok:
+			// Should receive ok from the listener
 		case <-time.After(time.Second * 1):
 			t.Errorf("testListeners #%d: expected handler %s to be called", i, test.handler)
 			return
 		}
+
+		// Reset listeners
+		p1.RemoveGetAddrMsgListener(test.handler)
+		p1.RemoveAddrMsgListener(test.handler)
+		p1.RemovePingMsgListener(test.handler)
+		p1.RemovePongMsgListener(test.handler)
+		p1.RemoveAlertMsgListener(test.handler)
+		p1.RemoveMemPoolMsgListener(test.handler)
+		p1.RemoveTxMsgListener(test.handler)
+		p1.RemoveBlockMsgListener(test.handler)
+		p1.RemoveInvMsgListener(test.handler)
+		p1.RemoveHeadersMsgListener(test.handler)
+		p1.RemoveNotFoundMsgListener(test.handler)
+		p1.RemoveGetDataMsgListener(test.handler)
+		p1.RemoveGetBlocksMsgListener(test.handler)
+		p1.RemoveGetHeadersMsgListener(test.handler)
+		p1.RemoveFilterAddMsgListener(test.handler)
+		p1.RemoveFilterClearMsgListener(test.handler)
+		p1.RemoveFilterLoadMsgListener(test.handler)
+		p1.RemoveVersionMsgListener(test.handler)
+		p1.RemoveVerAckMsgListener(test.handler)
+		p1.RemoveRejectMsgListener(test.handler)
 	}
 }
 
