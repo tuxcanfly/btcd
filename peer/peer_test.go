@@ -49,7 +49,11 @@ func (c conn) RemoteAddr() net.Addr {
 	}
 	host, strPort, _ := net.SplitHostPort(c.raddr)
 	port, _ := strconv.Atoi(strPort)
-	return &socks.ProxiedAddr{c.rnet, host, port}
+	return &socks.ProxiedAddr{
+		Net:  c.rnet,
+		Host: host,
+		Port: port,
+	}
 }
 
 // Close handles closing the connection.
@@ -132,8 +136,13 @@ func TestPeerConnection(t *testing.T) {
 				p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
 					ready <- struct{}{}
 				})
-				<-ready
-				<-ready
+				for i := 0; i < 2; i++ {
+					select {
+					case <-ready:
+					case <-time.After(time.Second * 1):
+						return nil, nil, errors.New("verack timeout")
+					}
+				}
 
 				return p1, p2, nil
 			},
@@ -169,8 +178,13 @@ func TestPeerConnection(t *testing.T) {
 				p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
 					ready <- struct{}{}
 				})
-				<-ready
-				<-ready
+				for i := 0; i < 2; i++ {
+					select {
+					case <-ready:
+					case <-time.After(time.Second * 1):
+						return nil, nil, errors.New("verack timeout")
+					}
+				}
 
 				return p1, p2, nil
 			},
@@ -607,6 +621,26 @@ func TestOutboundPeer(t *testing.T) {
 		t.Errorf("Connect: unexpected err %v\n", err)
 		return
 	}
+
+	// Test PushXXX
+	var addrs []*wire.NetAddress
+	for i := 0; i < 5; i++ {
+		na := wire.NetAddress{}
+		addrs = append(addrs, &na)
+	}
+	if err := p2.PushAddrMsg(addrs); err != nil {
+		t.Errorf("PushAddrMsg: unexpected err %v\n", err)
+		return
+	}
+	if err := p2.PushGetBlocksMsg(nil, &wire.ShaHash{}); err != nil {
+		t.Errorf("PushGetBlocksMsg: unexpected err %v\n", err)
+		return
+	}
+	if err := p2.PushGetHeadersMsg(nil, &wire.ShaHash{}); err != nil {
+		t.Errorf("PushGetHeadersMsg: unexpected err %v\n", err)
+		return
+	}
+	p2.PushRejectMsg("block", wire.RejectMalformed, "invalid", nil, true)
 
 	// Test Queue Messages
 	p2.QueueMessage(wire.NewMsgGetAddr(), done)
