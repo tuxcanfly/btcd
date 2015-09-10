@@ -7,14 +7,17 @@ package peer_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/btcsuite/btcd/addrmgr"
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/go-socks/socks"
 )
 
 // conn mocks a network connection by implementing the net.Conn interface.  It
@@ -30,6 +33,9 @@ type conn struct {
 
 	// remote network, address for the connection.
 	rnet, raddr string
+
+	// mocks socks proxy if true
+	proxy bool
 }
 
 // LocalAddr returns the local address for the connection.
@@ -39,7 +45,12 @@ func (c conn) LocalAddr() net.Addr {
 
 // Remote returns the remote address for the connection.
 func (c conn) RemoteAddr() net.Addr {
-	return &addr{c.rnet, c.raddr}
+	if !c.proxy {
+		return &addr{c.rnet, c.raddr}
+	}
+	host, strPort, _ := net.SplitHostPort(c.raddr)
+	port, _ := strconv.Atoi(strPort)
+	return &socks.ProxiedAddr{c.rnet, host, port}
 }
 
 // Close handles closing the connection.
@@ -88,53 +99,110 @@ func TestPeerConnection(t *testing.T) {
 		Net:              wire.MainNet,
 		Services:         wire.SFNodeNetwork,
 	}
-	c1, c2 := pipe(
-		&conn{raddr: "127.0.0.1:8333"},
-		&conn{raddr: "127.0.0.1:8333"},
-	)
 
-	p1 := peer.NewInboundPeer(peerCfg, 0, c1)
-	err := p1.Start()
-	if err != nil {
-		t.Errorf("Start: error %v", err)
-		return
+	tests := []struct {
+		name     string
+		getPeers func() (*peer.Peer, *peer.Peer, error)
+	}{
+		{
+			"basic handshake",
+			func() (*peer.Peer, *peer.Peer, error) {
+				c1, c2 := pipe(
+					&conn{raddr: "127.0.0.1:8333"},
+					&conn{raddr: "127.0.0.1:8333"},
+				)
+				p1 := peer.NewInboundPeer(peerCfg, 0, c1)
+				err := p1.Start()
+				if err != nil {
+					return nil, nil, err
+				}
+
+				na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), wire.SFNodeNetwork)
+				if err != nil {
+					return nil, nil, err
+				}
+				p2 := peer.NewOutboundPeer(peerCfg, 1, na)
+				if err := p2.Connect(c2); err != nil {
+					return nil, nil, err
+				}
+				// Wait until veracks are exchanged
+				ready := make(chan struct{}, 1)
+				p1.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
+					ready <- struct{}{}
+				})
+				p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
+					ready <- struct{}{}
+				})
+				<-ready
+				<-ready
+
+				return p1, p2, nil
+			},
+		},
+		{
+			"proxied connection",
+			func() (*peer.Peer, *peer.Peer, error) {
+				c1, c2 := pipe(
+					&conn{raddr: "127.0.0.1:8333", proxy: true},
+					&conn{raddr: "127.0.0.1:8333"},
+				)
+				p1 := peer.NewInboundPeer(peerCfg, 0, c1)
+				err := p1.Start()
+				if err != nil {
+					return nil, nil, err
+				}
+
+				na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), wire.SFNodeNetwork)
+				if err != nil {
+					return nil, nil, err
+				}
+				// Test diff protocol versions in negotiation
+				peerCfg.ProtocolVersion = peer.MaxProtocolVersion + 1
+				p2 := peer.NewOutboundPeer(peerCfg, 1, na)
+				if err := p2.Connect(c2); err != nil {
+					return nil, nil, err
+				}
+				// Wait until veracks are exchanged
+				ready := make(chan struct{}, 1)
+				p1.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
+					ready <- struct{}{}
+				})
+				p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
+					ready <- struct{}{}
+				})
+				<-ready
+				<-ready
+
+				return p1, p2, nil
+			},
+		},
 	}
+	t.Logf("Running %d tests", len(tests))
+	peerID := int32(1)
+	for i, test := range tests {
+		p1, p2, err := test.getPeers()
+		if err != nil {
+			t.Errorf("TestPeerConnection: #%d %s error creating peers: %v", i,
+				test.name, err)
+			continue
+		}
+		// Test peer flags and stats
+		testPeer(t, p1, true, peerID)
+		peerID++
+		testPeer(t, p2, false, peerID)
+		peerID++
 
-	na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), wire.SFNodeNetwork)
-	if err != nil {
-		t.Errorf("HostToNetAddress: error %v\n", err)
-		return
+		// Test listeners
+		testListeners(t, p1, p2)
+		p1.Shutdown()
+		p2.Shutdown()
 	}
-	// Test diff protocol versions in negotiation
-	peerCfg.ProtocolVersion = peer.MaxProtocolVersion + 1
-	p2 := peer.NewOutboundPeer(peerCfg, 1, na)
-	if err := p2.Connect(c2); err != nil {
-		t.Errorf("Connect: error %v\n", err)
-		return
-	}
-
-	// Wait until veracks are exchanged
-	ready := make(chan struct{}, 1)
-	p1.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-		ready <- struct{}{}
-	})
-	p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-		ready <- struct{}{}
-	})
-	<-ready
-	<-ready
-
-	// Test peer flags and stats
-	testPeer(t, p1, true)
-	testPeer(t, p2, false)
-
-	// Test listeners
-	testListeners(t, p1, p2)
 }
 
 // testPeer tests the given peer's flags and stats
-func testPeer(t *testing.T, p *peer.Peer, inbound bool) {
-	wantID := int32(1)
+func testPeer(t *testing.T, p *peer.Peer, inbound bool, peerID int32) {
+	fmt.Printf("%d %d \n", peerID, p.ID())
+	wantID := peerID
 	wantAddr := "127.0.0.1:8333"
 	wantUserAgent := "/btcwire:0.2.0/peer:1.0/"
 	wantInbound := true
@@ -149,7 +217,6 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool) {
 	wantTimeOffset := int64(0)
 
 	if !inbound {
-		wantID = 2
 		wantInbound = false
 	}
 
@@ -425,7 +492,7 @@ func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
 	}
 }
 
-// TestPeer tests that the peer works as expected.
+// TestOutboundPeer tests that the outbound peer works as expected.
 func TestOutboundPeer(t *testing.T) {
 	// Use a mock NewestBlock func to test errs
 	var errBlockNotFound = errors.New("newest block not found")
