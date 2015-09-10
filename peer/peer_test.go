@@ -7,7 +7,6 @@ package peer_test
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strconv"
@@ -201,7 +200,6 @@ func TestPeerConnection(t *testing.T) {
 
 // testPeer tests the given peer's flags and stats
 func testPeer(t *testing.T, p *peer.Peer, inbound bool, peerID int32) {
-	fmt.Printf("%d %d \n", peerID, p.ID())
 	wantID := peerID
 	wantAddr := "127.0.0.1:8333"
 	wantUserAgent := "/btcwire:0.2.0/peer:1.0/"
@@ -210,6 +208,7 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool, peerID int32) {
 	wantProtocolVersion := uint32(70002)
 	wantConnected := true
 	wantVersionKnown := true
+	wantVerAckReceived := true
 	wantLastBlock := int32(234439)
 	wantStartingHeight := int32(234439)
 	wantLastPingNonce := uint64(0)
@@ -245,6 +244,11 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool, peerID int32) {
 		return
 	}
 
+	if !p.LastPingTime().IsZero() {
+		t.Errorf("testPeer: wrong LastPingTime - got %v, want zero", p.LastPingTime())
+		return
+	}
+
 	if p.LastPingNonce() != wantLastPingNonce {
 		t.Errorf("testPeer: wrong LastPingNonce - got %v, want %v", p.LastPingNonce(), wantLastPingNonce)
 		return
@@ -252,6 +256,11 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool, peerID int32) {
 
 	if p.LastPingMicros() != wantLastPingMicros {
 		t.Errorf("testPeer: wrong LastPingMicros - got %v, want %v", p.LastPingMicros(), wantLastPingMicros)
+		return
+	}
+
+	if p.VerAckReceived() != wantVerAckReceived {
+		t.Errorf("testPeer: wrong VerAckReceived - got %v, want %v", p.VerAckReceived(), wantVerAckReceived)
 		return
 	}
 
@@ -284,6 +293,13 @@ func testPeer(t *testing.T, p *peer.Peer, inbound bool, peerID int32) {
 		t.Errorf("testPeer: wrong Connected - got %v, want %v", p.Connected(), wantConnected)
 		return
 	}
+
+	// TODO: actually test the following methods
+	p.LastSend()
+	p.LastRecv()
+	p.TimeConnected()
+	p.BytesSent()
+	p.BytesReceived()
 
 	stats := p.StatsSnapshot()
 
@@ -567,6 +583,11 @@ func TestOutboundPeer(t *testing.T) {
 	}
 	p1.UpdateLastAnnouncedBlock(latestBlockSha)
 	p1.UpdateLastBlockHeight(234440)
+	if p1.LastAnnouncedBlock() != latestBlockSha {
+		t.Errorf("LastAnnouncedBlock: wrong block - got %v, want %v",
+			p1.LastAnnouncedBlock(), latestBlockSha)
+		return
+	}
 
 	// Test Queue Inv after connection
 	p1.QueueInventory(fakeInv)
