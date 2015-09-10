@@ -64,7 +64,7 @@ var (
 // Config is the struct to hold configuration options useful to Peer.
 type Config struct {
 
-	// Callback which returns the newest block details
+	// Callback which returns the newest block details.
 	NewestBlock ShaFunc
 
 	// BestLocalAddress returns the best local address for a given address.
@@ -93,6 +93,9 @@ type Config struct {
 
 	// Services flag to be advertised in peer messages.
 	Services wire.ServiceFlag
+
+	// Protocol version to use.
+	ProtocolVersion uint32
 }
 
 // minUint32 is a helper function to return the minimum of two uint32s.
@@ -582,7 +585,7 @@ func (p *Peer) pushVersionMsg() error {
 	msg.Services = p.Services()
 
 	// Advertise our max supported protocol version.
-	msg.ProtocolVersion = MaxProtocolVersion
+	msg.ProtocolVersion = int32(p.ProtocolVersion())
 
 	p.QueueMessage(msg, nil)
 	return nil
@@ -1957,6 +1960,15 @@ func (p *Peer) WaitForShutdown() {
 // inbound flag.  This is used by the NewInboundPeer and NewOutboundPeer
 // functions to perform base setup needed by both types of peers.
 func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
+	// If provided, use the configured version, else default to the max
+	// supported version.
+	var protocolVersion uint32
+	if cfg.ProtocolVersion != 0 {
+		protocolVersion = cfg.ProtocolVersion
+	} else {
+		protocolVersion = MaxProtocolVersion
+	}
+
 	p := Peer{
 		btcnet:         cfg.Net,
 		inbound:        inbound,
@@ -1967,7 +1979,7 @@ func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
 		outputInvChan:  make(chan *wire.InvVect, outputBufferSize),
 		quit:           make(chan struct{}),
 		stats: stats{
-			protocolVersion: MaxProtocolVersion,
+			protocolVersion: protocolVersion,
 		},
 		newestSha: cfg.NewestBlock,
 		nonce:     nonce,

@@ -105,6 +105,8 @@ func TestPeerConnection(t *testing.T) {
 		t.Errorf("HostToNetAddress: error %v\n", err)
 		return
 	}
+	// Test diff protocol versions in negotiation
+	peerCfg.ProtocolVersion = peer.MaxProtocolVersion + 1
 	p2 := peer.NewOutboundPeer(peerCfg, 1, na)
 	if err := p2.Connect(c2); err != nil {
 		t.Errorf("Connect: error %v\n", err)
