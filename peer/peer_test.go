@@ -128,22 +128,6 @@ func TestPeerConnection(t *testing.T) {
 				if err := p2.Connect(c2); err != nil {
 					return nil, nil, err
 				}
-				// Wait until veracks are exchanged
-				ready := make(chan struct{}, 1)
-				p1.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-					ready <- struct{}{}
-				})
-				p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-					ready <- struct{}{}
-				})
-				for i := 0; i < 2; i++ {
-					select {
-					case <-ready:
-					case <-time.After(time.Second * 1):
-						return nil, nil, errors.New("verack timeout")
-					}
-				}
-
 				return p1, p2, nil
 			},
 		},
@@ -164,28 +148,37 @@ func TestPeerConnection(t *testing.T) {
 				if err != nil {
 					return nil, nil, err
 				}
-				// Test diff protocol versions in negotiation
+				p2 := peer.NewOutboundPeer(peerCfg, 1, na)
+				if err := p2.Connect(c2); err != nil {
+					return nil, nil, err
+				}
+				return p1, p2, nil
+			},
+		},
+		{
+			"version negotiation",
+			func() (*peer.Peer, *peer.Peer, error) {
+				c1, c2 := pipe(
+					&conn{raddr: "127.0.0.1:8333"},
+					&conn{raddr: "127.0.0.1:8333"},
+				)
+				p1 := peer.NewInboundPeer(peerCfg, 0, c1)
+				err := p1.Start()
+				if err != nil {
+					return nil, nil, err
+				}
+
+				na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), wire.SFNodeNetwork)
+				if err != nil {
+					return nil, nil, err
+				}
+				// Pass a different protocol version for outbound peer
 				peerCfg.ProtocolVersion = peer.MaxProtocolVersion + 1
 				p2 := peer.NewOutboundPeer(peerCfg, 1, na)
 				if err := p2.Connect(c2); err != nil {
 					return nil, nil, err
 				}
-				// Wait until veracks are exchanged
-				ready := make(chan struct{}, 1)
-				p1.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-					ready <- struct{}{}
-				})
-				p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-					ready <- struct{}{}
-				})
-				for i := 0; i < 2; i++ {
-					select {
-					case <-ready:
-					case <-time.After(time.Second * 1):
-						return nil, nil, errors.New("verack timeout")
-					}
-				}
-
+				peerCfg.ProtocolVersion = peer.MaxProtocolVersion
 				return p1, p2, nil
 			},
 		},
@@ -193,12 +186,33 @@ func TestPeerConnection(t *testing.T) {
 	t.Logf("Running %d tests", len(tests))
 	peerID := int32(1)
 	for i, test := range tests {
+		t.Logf("Running test: %s", test.name)
 		p1, p2, err := test.getPeers()
 		if err != nil {
-			t.Errorf("TestPeerConnection: #%d %s error creating peers: %v", i,
-				test.name, err)
+			t.Errorf("TestPeerConnection: #%d %s unexpected err - %v",
+				i, test.name, err)
 			continue
 		}
+
+		// Wait until veracks are exchanged
+		ready := make(chan struct{}, 1)
+		p1.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer,
+			msg *wire.MsgVerAck) {
+			ready <- struct{}{}
+		})
+		p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer,
+			msg *wire.MsgVerAck) {
+			ready <- struct{}{}
+		})
+		for i := 0; i < 2; i++ {
+			select {
+			case <-ready:
+			case <-time.After(time.Second * 1):
+				t.Errorf("TestPeerConnection: #%d - verack timeout", i)
+				continue
+			}
+		}
+
 		// Test peer flags and stats
 		testPeer(t, p1, true, peerID)
 		peerID++
@@ -405,7 +419,6 @@ func testListeners(t *testing.T, p1 *peer.Peer, p2 *peer.Peer) {
 		},
 	}
 
-	t.Logf("Running %d tests", len(tests))
 	for i, test := range tests {
 		// Chan to make sure the listener is fired
 		ok := make(chan struct{})
