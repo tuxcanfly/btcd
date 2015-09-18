@@ -26,6 +26,11 @@ const (
 	// MaxProtocolVersion is the max protocol version the peer supports.
 	MaxProtocolVersion = 70002
 
+	// BlockStallTimeout is the number of seconds we will wait for a
+	// "block" response after we send out a "getdata" for an announced
+	// block before we deem the peer inactive, and disconnect it.
+	BlockStallTimeout = 5 * time.Second
+
 	// outputBufferSize is the number of elements the output channels use.
 	outputBufferSize = 50
 
@@ -260,6 +265,9 @@ type Peer struct {
 	sendDoneQueue      chan struct{}
 	queueWg            sync.WaitGroup // TODO(oga) wg -> single use channel?
 	outputInvChan      chan *wire.InvVect
+	blockStallActivate chan time.Duration
+	blockStallTimer    <-chan time.Time
+	blockStallCancel   chan struct{}
 	quit               chan struct{}
 
 	stats
@@ -303,6 +311,15 @@ func (p *Peer) isKnownInventory(invVect *wire.InvVect) bool {
 		return true
 	}
 	return false
+}
+
+// SetBlockStallTimer activates the block stall timer for this peer. After the
+// block stall timeout mode has been activated, the next outgoing "getdata"
+// message which requests a block will start the timer. If 'timeout' seconds
+// passes before the peer receives a "block" response, then the peer will
+// disconnect itself.
+func (p *Peer) SetBlockStallTimer(timeout time.Duration) {
+	p.blockStallActivate <- timeout
 }
 
 // UpdateLastBlockHeight updates the last known block for the peer. It is safe
@@ -1518,6 +1535,9 @@ out:
 			p.listenerMtx.Unlock()
 
 		case *wire.MsgBlock:
+			if p.blockStallCancel != nil {
+				close(p.blockStallCancel)
+			}
 			p.listenerMtx.Lock()
 			for key, listener := range p.blockMsgListeners {
 				log.Tracef("Running %s listener for %s", key, p)
@@ -1769,6 +1789,8 @@ func (p *Peer) outHandler() {
 		}
 		p.QueueMessage(wire.NewMsgPing(nonce), nil)
 	})
+	var blockStallActive bool
+	var stallTimeout time.Duration
 out:
 	for {
 		select {
@@ -1804,6 +1826,20 @@ out:
 				// Should return an inv.
 			case *wire.MsgGetData:
 				// Should get us block, tx, or not found.
+
+				// If the blockStallTimer has not already been
+				// started, then initialize the timer to fire
+				// off a read in BlockStallTimeout seconds.
+				// Additionally, create a cancellation channel
+				// so the inHandler can signal us if a MsgBlock
+				// comes in time.
+				gdmsg := msg.msg.(*wire.MsgGetData)
+				if blockStallActive && p.blockStallTimer == nil &&
+					gdmsg.RequestsBlock() {
+					log.Debugf("Starting block stall timer for: %v", p)
+					p.blockStallTimer = time.After(stallTimeout)
+					p.blockStallCancel = make(chan struct{})
+				}
 			case *wire.MsgGetHeaders:
 				// Should get us headers back.
 			default:
@@ -1825,6 +1861,29 @@ out:
 			log.Tracef("%s: acking queuehandler", p)
 			p.sendDoneQueue <- struct{}{}
 			log.Tracef("%s: acked queuehandler", p)
+
+		case timeout := <-p.blockStallActivate:
+			log.Debugf("Activating block stall timer (%v "+
+				"seconds) for: %v", timeout, p)
+			blockStallActive = true
+			stallTimeout = timeout
+		case <-p.blockStallCancel:
+			// The inHandler received a MsgBlock before
+			// BlockStallTimeout seconds had elapsed. So we set the
+			// blockStallTimer and blockStallCancel to nil so the
+			//select loop won't block on those cases in the future.
+			log.Debugf("Stopping block stall timer for: %v", p)
+			p.blockStallTimer = nil
+			p.blockStallCancel = nil
+			blockStallActive = false
+		case <-p.blockStallTimer:
+			// The inHandler didn't receive a MsgBlock before
+			// BlockStallTimeout seconds had elapsed. So we
+			// disconnect the peer for stalling block download.
+			log.Warnf("Peer %s is stalling initial "+
+				"block download, no block response for %v "+
+				"seconds disconnecting", p, BlockStallTimeout)
+			p.Disconnect()
 
 		case <-p.quit:
 			break out
@@ -1970,14 +2029,15 @@ func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
 	}
 
 	p := Peer{
-		btcnet:         cfg.Net,
-		inbound:        inbound,
-		knownInventory: NewMruInventoryMap(maxKnownInventory),
-		outputQueue:    make(chan outMsg, outputBufferSize),
-		sendQueue:      make(chan outMsg, 1),   // nonblocking sync
-		sendDoneQueue:  make(chan struct{}, 1), // nonblocking sync
-		outputInvChan:  make(chan *wire.InvVect, outputBufferSize),
-		quit:           make(chan struct{}),
+		btcnet:             cfg.Net,
+		inbound:            inbound,
+		knownInventory:     NewMruInventoryMap(maxKnownInventory),
+		outputQueue:        make(chan outMsg, outputBufferSize),
+		sendQueue:          make(chan outMsg, 1),   // nonblocking sync
+		sendDoneQueue:      make(chan struct{}, 1), // nonblocking sync
+		outputInvChan:      make(chan *wire.InvVect, outputBufferSize),
+		blockStallActivate: make(chan time.Duration),
+		quit:               make(chan struct{}),
 		stats: stats{
 			protocolVersion: protocolVersion,
 		},
