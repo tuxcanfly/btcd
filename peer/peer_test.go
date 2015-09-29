@@ -5,7 +5,6 @@
 package peer_test
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"net"
@@ -566,8 +565,8 @@ func TestOutboundPeer(t *testing.T) {
 		Services:         wire.SFNodeNetwork,
 	}
 
-	var b bytes.Buffer
-	c := &conn{raddr: "127.0.0.1:8333", Writer: &b, Reader: &b}
+	r, w := io.Pipe()
+	c := &conn{raddr: "127.0.0.1:8333", Writer: w, Reader: r}
 
 	na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(8333), peerCfg.Services)
 	if err != nil {

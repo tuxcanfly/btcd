@@ -760,6 +760,24 @@ func (s *server) handleGetHeadersMsg(p *peer.Peer, msg *wire.MsgGetHeaders) {
 	p.QueueMessage(headersMsg, nil)
 }
 
+// isValidBIP0111 is a helper function for the bloom filter commands to check
+// BIP0111 compliance.
+func isValidBIP0111(p *peer.Peer, cmd string) bool {
+	if p.Services()&wire.SFNodeBloom != wire.SFNodeBloom {
+		if p.ProtocolVersion() >= wire.BIP0111Version {
+			peerLog.Debugf("%s sent an unsupported %s "+
+				"request -- disconnecting", p, cmd)
+			p.Disconnect()
+		} else {
+			peerLog.Debugf("Ignoring %s request from %s -- bloom "+
+				"support is disabled", cmd, p)
+		}
+		return false
+	}
+
+	return true
+}
+
 // handleFilterAddMsg is invoked when a peer receives a filteradd bitcoin
 // message and is used by remote peers to add data to an already loaded bloom
 // filter.  The peer will be disconnected if a filter is not loaded when this
@@ -928,24 +946,6 @@ func (s *server) handleAddrMsg(p *peer.Peer, msg *wire.MsgAddr) {
 	// XXX bitcoind gives a 2 hour time penalty here, do we want to do the
 	// same?
 	s.addrManager.AddAddresses(msg.AddrList, p.NA())
-}
-
-// isValidBIP0111 is a helper function for the bloom filter commands to check
-// BIP0111 compliance.
-func isValidBIP0111(p *peer.Peer, cmd string) bool {
-	if p.Services()&wire.SFNodeBloom != wire.SFNodeBloom {
-		if p.ProtocolVersion() >= wire.BIP0111Version {
-			peerLog.Debugf("%s sent an unsupported %s "+
-				"request -- disconnecting", p, cmd)
-			p.Disconnect()
-		} else {
-			peerLog.Debugf("Ignoring %s request from %s -- bloom "+
-				"support is disabled", cmd, p)
-		}
-		return false
-	}
-
-	return true
 }
 
 // registerListeners registers peer message listeners

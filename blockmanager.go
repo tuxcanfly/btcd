@@ -79,18 +79,16 @@ func (p *peerInfo) relayTxDisabled() bool {
 // It is safe for concurrent access.
 func (p *peerInfo) addKnownAddress(addr string) {
 	p.knownAddrMutex.Lock()
-	defer p.knownAddrMutex.Unlock()
-
 	p.knownAddresses[addr] = struct{}{}
+	p.knownAddrMutex.Unlock()
 }
 
 // addressKnown returns true if the given address is known to the peer.
 // It is safe for concurrent access.
 func (p *peerInfo) addressKnown(addr string) bool {
 	p.knownAddrMutex.Lock()
-	defer p.knownAddrMutex.Unlock()
-
 	_, exists := p.knownAddresses[addr]
+	p.knownAddrMutex.Unlock()
 	return exists
 }
 
@@ -286,7 +284,7 @@ func (b *blockManager) peerInfo(p *peer.Peer) (*peerInfo, error) {
 
 	pInfo, ok := b.peers[p]
 	if !ok {
-		return nil, fmt.Errorf("Missing peer info for %s", p)
+		return nil, fmt.Errorf("missing peer info for %s", p)
 	}
 	return pInfo, nil
 }
