@@ -1318,9 +1318,7 @@ func (p *Peer) queueHandler() {
 	// To avoid duplication below.
 	queuePacket := func(msg outMsg, list *list.List, waiting bool) bool {
 		if !waiting {
-			log.Tracef("%s: sending to outHandler", p)
 			p.sendQueue <- msg
-			log.Tracef("%s: sent to outHandler", p)
 		} else {
 			list.PushBack(msg)
 		}
@@ -1336,8 +1334,6 @@ out:
 		// This channel is notified when a message has been sent across
 		// the network socket.
 		case <-p.sendDoneQueue:
-			log.Tracef("%s: acked by outhandler", p)
-
 			// No longer waiting if there are no more messages
 			// in the pending messages queue.
 			next := pendingMsgs.Front()
@@ -1349,9 +1345,7 @@ out:
 			// Notify the outHandler about the next item to
 			// asynchronously send.
 			val := pendingMsgs.Remove(next)
-			log.Tracef("%s: sending to outHandler", p)
 			p.sendQueue <- val.(outMsg)
-			log.Tracef("%s: sent to outHandler", p)
 
 		case iv := <-p.outputInvChan:
 			// No handshake?  They'll find out soon enough.
@@ -1467,7 +1461,6 @@ out:
 			// the inv is of no interest explicitly solicited invs
 			// should elicit a reply but we don't track them
 			// specially.
-			log.Tracef("%s: received from queuehandler", p)
 			reset := true
 			switch m := msg.msg.(type) {
 			case *wire.MsgVersion:
@@ -1522,9 +1515,7 @@ out:
 			if msg.doneChan != nil {
 				msg.doneChan <- struct{}{}
 			}
-			log.Tracef("%s: acking queuehandler", p)
 			p.sendDoneQueue <- struct{}{}
-			log.Tracef("%s: acked queuehandler", p)
 
 		case timeout := <-p.blockStallActivate:
 			log.Debugf("Activating block stall timer (%v "+
