@@ -1414,6 +1414,17 @@ cleanup:
 	log.Tracef("Peer queue handler done for %s", p)
 }
 
+// invContainsBlock returns true if the passed InvList contains an Inv of type
+// InvTypeBlock. Otherwise, it returns false.
+func invContainsBlock(invList []*wire.InvVect) bool {
+	for _, inv := range invList {
+		if inv.Type == wire.InvTypeBlock {
+			return true
+		}
+	}
+	return false
+}
+
 // outHandler handles all outgoing messages for the peer.  It must be run as a
 // goroutine.  It uses a buffered channel to serialize output messages while
 // allowing the sender to continue running asynchronously.
@@ -1590,6 +1601,17 @@ func (p *Peer) QueueInventory(invVect *wire.InvVect) {
 	p.outputInvChan <- invVect
 }
 
+// Connect uses the given conn to connect to the peer.
+func (p *Peer) Connect(conn net.Conn) error {
+	p.conn = conn
+	p.timeConnected = time.Now()
+
+	// Connection was successful so log it and start peer.
+	log.Debugf("Connected to %s", p.conn.RemoteAddr())
+	atomic.AddInt32(&p.connected, 1)
+	return p.Start()
+}
+
 // Connected returns whether or not the peer is currently connected.
 func (p *Peer) Connected() bool {
 	return atomic.LoadInt32(&p.connected) != 0 &&
@@ -1702,26 +1724,4 @@ func NewOutboundPeer(cfg *Config, nonce uint64, na *wire.NetAddress) *Peer {
 	p.na = na
 	p.addr = fmt.Sprintf("%v:%v", na.IP, na.Port)
 	return p
-}
-
-// Connect uses the given conn to connect to the peer.
-func (p *Peer) Connect(conn net.Conn) error {
-	p.conn = conn
-	p.timeConnected = time.Now()
-
-	// Connection was successful so log it and start peer.
-	log.Debugf("Connected to %s", p.conn.RemoteAddr())
-	atomic.AddInt32(&p.connected, 1)
-	return p.Start()
-}
-
-// invContainsBlock returns true if the passed InvList contains an Inv of type
-// InvTypeBlock. Otherwise, it returns false.
-func invContainsBlock(invList []*wire.InvVect) bool {
-	for _, inv := range invList {
-		if inv.Type == wire.InvTypeBlock {
-			return true
-		}
-	}
-	return false
 }
