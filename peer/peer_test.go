@@ -98,7 +98,7 @@ func TestOutboundPeer(t *testing.T) {
 		UserAgentName:    "peer",
 		UserAgentVersion: "1.0",
 		Net:              wire.MainNet,
-		Services:         wire.SFNodeNetwork,
+		Services:         0,
 	}
 
 	r, w := io.Pipe()
