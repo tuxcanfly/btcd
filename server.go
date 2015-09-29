@@ -102,8 +102,8 @@ type updatePeerHeightsMsg struct {
 // server provides a bitcoin server for handling communications to and from
 // bitcoin peers.
 type server struct {
-	nonce                uint64
 	listeners            []net.Listener
+	peerConfig           *peer.Config
 	chainParams          *chaincfg.Params
 	started              int32      // atomic
 	shutdown             int32      // atomic
@@ -760,11 +760,33 @@ func (s *server) handleGetHeadersMsg(p *peer.Peer, msg *wire.MsgGetHeaders) {
 	p.QueueMessage(headersMsg, nil)
 }
 
+// isValidBIP0111 is a helper function for the bloom filter commands to check
+// BIP0111 compliance.
+func isValidBIP0111(p *peer.Peer, cmd string) bool {
+	if p.Services()&wire.SFNodeBloom != wire.SFNodeBloom {
+		if p.ProtocolVersion() >= wire.BIP0111Version {
+			peerLog.Debugf("%s sent an unsupported %s "+
+				"request -- disconnecting", p, cmd)
+			p.Disconnect()
+		} else {
+			peerLog.Debugf("Ignoring %s request from %s -- bloom "+
+				"support is disabled", cmd, p)
+		}
+		return false
+	}
+
+	return true
+}
+
 // handleFilterAddMsg is invoked when a peer receives a filteradd bitcoin
 // message and is used by remote peers to add data to an already loaded bloom
 // filter.  The peer will be disconnected if a filter is not loaded when this
 // message is received.
 func (s *server) handleFilterAddMsg(p *peer.Peer, msg *wire.MsgFilterAdd) {
+	if !isValidBIP0111(p, msg.Command()) {
+		return
+	}
+
 	pInfo, err := s.blockManager.peerInfo(p)
 	if err != nil {
 		bmgrLog.Errorf("%v", err)
@@ -785,6 +807,10 @@ func (s *server) handleFilterAddMsg(p *peer.Peer, msg *wire.MsgFilterAdd) {
 // The peer will be disconnected if a filter is not loaded when this message is
 // received.
 func (s *server) handleFilterClearMsg(p *peer.Peer, msg *wire.MsgFilterClear) {
+	if !isValidBIP0111(p, msg.Command()) {
+		return
+	}
+
 	pInfo, err := s.blockManager.peerInfo(p)
 	if err != nil {
 		bmgrLog.Errorf("%v", err)
@@ -803,6 +829,10 @@ func (s *server) handleFilterClearMsg(p *peer.Peer, msg *wire.MsgFilterClear) {
 // message and it used to load a bloom filter that should be used for
 // delivering merkle blocks and associated transactions that match the filter.
 func (s *server) handleFilterLoadMsg(p *peer.Peer, msg *wire.MsgFilterLoad) {
+	if !isValidBIP0111(p, msg.Command()) {
+		return
+	}
+
 	pInfo, err := s.blockManager.peerInfo(p)
 	if err != nil {
 		bmgrLog.Errorf("%v", err)
@@ -918,33 +948,16 @@ func (s *server) handleAddrMsg(p *peer.Peer, msg *wire.MsgAddr) {
 	s.addrManager.AddAddresses(msg.AddrList, p.NA())
 }
 
-// registerListeners registers peer message listeners
-func (s *server) registerListeners(p *peer.Peer) {
-	p.AddVersionMsgListener("handleVersionMsg", s.handleVersionMsg)
-	p.AddMemPoolMsgListener("handleMemPoolMsg", s.handleMemPoolMsg)
-	p.AddTxMsgListener("handleTxMsg", s.handleTxMsg)
-	p.AddBlockMsgListener("handleBlockMsg", s.handleBlockMsg)
-	p.AddInvMsgListener("handleInvMsg", s.handleInvMsg)
-	p.AddHeadersMsgListener("handleHeadersMsg", s.handleHeadersMsg)
-	p.AddGetDataMsgListener("handleGetDataMsg", s.handleGetDataMsg)
-	p.AddGetBlocksMsgListener("handleGetBlocksMsg", s.handleGetBlocksMsg)
-	p.AddGetHeadersMsgListener("handleGetHeadersMsg", s.handleGetHeadersMsg)
-	p.AddFilterAddMsgListener("handleFilterAddMsg", s.handleFilterAddMsg)
-	p.AddFilterClearMsgListener("handleFilterClearMsg", s.handleFilterClearMsg)
-	p.AddFilterLoadMsgListener("handleFilterLoadMsg", s.handleFilterLoadMsg)
-	p.AddGetAddrMsgListener("handleGetAddrMsg", s.handleGetAddrMsg)
-	p.AddAddrMsgListener("handleAddrMsg", s.handleAddrMsg)
+// handleRead is invoked when a peer receives a message and it is used to update
+// the bytes received by the server.
+func (s *server) handleRead(p *peer.Peer, bytesRead int, msg wire.Message, err error) {
+	s.AddBytesReceived(uint64(bytesRead))
+}
 
-	// When peer gets shutdown, notify the server that it is done.
-	go func() {
-		p.WaitForShutdown()
-		s.donePeers <- p
-
-		// Only tell block manager we are gone if we ever told it we existed.
-		if p.VersionKnown() {
-			s.blockManager.DonePeer(p)
-		}
-	}()
+// handleWrite is invoked when a peer sends a message and it is used to update
+// the bytes sent by the server.
+func (s *server) handleWrite(p *peer.Peer, bytesWritten int, msg wire.Message, err error) {
+	s.AddBytesSent(uint64(bytesWritten))
 }
 
 func (p *peerState) Count() int {
@@ -1068,6 +1081,16 @@ func (s *server) handleAddPeerMsg(state *peerState, p *peer.Peer, persistent boo
 		}
 	}
 
+	// Handle peer shutdown or disconnect
+	go func() {
+		p.WaitForShutdown()
+		s.donePeers <- p
+
+		// Only tell block manager we are gone if we ever told it we existed.
+		if p.VersionKnown() {
+			s.blockManager.DonePeer(p)
+		}
+	}()
 	return true
 }
 
@@ -1354,19 +1377,7 @@ func (s *server) listenHandler(listener net.Listener) {
 			}
 			continue
 		}
-		peerCfg := &peer.Config{
-			NewestBlock:      s.db.NewestSha,
-			BestLocalAddress: s.addrManager.GetBestLocalAddress,
-			Proxy:            cfg.Proxy,
-			RegressionTest:   cfg.RegressionTest,
-			UserAgentName:    userAgentName,
-			UserAgentVersion: userAgentVersion,
-			Net:              s.chainParams.Net,
-			Services:         wire.SFNodeNetwork,
-		}
-		p := peer.NewInboundPeer(peerCfg, s.nonce, conn)
-		s.registerListeners(p)
-		s.AddPeer(p)
+		s.AddPeer(peer.NewInboundPeer(s.peerConfig, conn))
 	}
 	s.wg.Done()
 	srvrLog.Tracef("Listener handler done for %s", listener.Addr())
@@ -1421,16 +1432,6 @@ func (s *server) seedFromDNS() {
 
 // addPeer initializes a new outbound peer and setups the message listeners.
 func (s *server) addPeer(addr string) *peer.Peer {
-	peerCfg := &peer.Config{
-		NewestBlock:      s.db.NewestSha,
-		BestLocalAddress: s.addrManager.GetBestLocalAddress,
-		Proxy:            cfg.Proxy,
-		RegressionTest:   cfg.RegressionTest,
-		UserAgentName:    userAgentName,
-		UserAgentVersion: userAgentVersion,
-		Net:              s.chainParams.Net,
-		Services:         wire.SFNodeNetwork,
-	}
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
 		srvrLog.Errorf("Tried to create a new outbound peer with invalid "+
@@ -1445,16 +1446,14 @@ func (s *server) addPeer(addr string) *peer.Peer {
 		return nil
 	}
 
-	na, err := s.addrManager.HostToNetAddress(host, uint16(port), peerCfg.Services)
+	na, err := s.addrManager.HostToNetAddress(host, uint16(port), s.services)
 	if err != nil {
 		srvrLog.Errorf("Can not turn host %s into netaddress: %v",
 			host, err)
 		return nil
 	}
 
-	p := peer.NewOutboundPeer(peerCfg, s.nonce, na)
-	s.registerListeners(p)
-	return p
+	return peer.NewOutboundPeer(s.peerConfig, na)
 }
 
 // establishConn establishes a connection to the peer.
@@ -2101,11 +2100,6 @@ out:
 // bitcoin network type specified by chainParams.  Use start to begin accepting
 // connections from peers.
 func newServer(listenAddrs []string, db database.Db, chainParams *chaincfg.Params) (*server, error) {
-	nonce, err := wire.RandomUint64()
-	if err != nil {
-		return nil, err
-	}
-
 	services := defaultServices
 	if cfg.NoPeerBloomFilters {
 		services &^= wire.SFNodeBloom
@@ -2238,7 +2232,6 @@ func newServer(listenAddrs []string, db database.Db, chainParams *chaincfg.Param
 	}
 
 	s := server{
-		nonce:                nonce,
 		listeners:            listeners,
 		chainParams:          chainParams,
 		addrManager:          amgr,
@@ -2265,6 +2258,34 @@ func newServer(listenAddrs []string, db database.Db, chainParams *chaincfg.Param
 	s.blockManager = bm
 	s.txMemPool = newTxMemPool(&s)
 	s.cpuMiner = newCPUMiner(&s)
+
+	s.peerConfig = &peer.Config{
+		NewestBlock:      db.NewestSha,
+		BestLocalAddress: amgr.GetBestLocalAddress,
+		Proxy:            cfg.Proxy,
+		UserAgentName:    userAgentName,
+		UserAgentVersion: userAgentVersion,
+		ChainParams:      chainParams,
+		Services:         services,
+		Listeners: peer.MessageListeners{
+			OnVersion:     s.handleVersionMsg,
+			OnMemPool:     s.handleMemPoolMsg,
+			OnTx:          s.handleTxMsg,
+			OnBlock:       s.handleBlockMsg,
+			OnInv:         s.handleInvMsg,
+			OnHeaders:     s.handleHeadersMsg,
+			OnGetData:     s.handleGetDataMsg,
+			OnGetBlocks:   s.handleGetBlocksMsg,
+			OnGetHeaders:  s.handleGetHeadersMsg,
+			OnFilterAdd:   s.handleFilterAddMsg,
+			OnFilterClear: s.handleFilterClearMsg,
+			OnFilterLoad:  s.handleFilterLoadMsg,
+			OnGetAddr:     s.handleGetAddrMsg,
+			OnAddr:        s.handleAddrMsg,
+			OnRead:        s.handleRead,
+			OnWrite:       s.handleWrite,
+		},
+	}
 
 	if cfg.AddrIndex {
 		ai, err := newAddrIndexer(&s)

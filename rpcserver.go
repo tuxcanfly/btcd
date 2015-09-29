@@ -2289,12 +2289,13 @@ func handleGetPeerInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{})
 		info := &btcjson.GetPeerInfoResult{
 			ID:             statsSnap.ID,
 			Addr:           statsSnap.Addr,
-			Services:       statsSnap.Services,
-			LastSend:       statsSnap.LastSend,
-			LastRecv:       statsSnap.LastRecv,
+			Services:       fmt.Sprintf("%08d", uint64(statsSnap.Services)),
+			LastSend:       statsSnap.LastSend.Unix(),
+			LastRecv:       statsSnap.LastRecv.Unix(),
 			BytesSent:      statsSnap.BytesSent,
 			BytesRecv:      statsSnap.BytesRecv,
-			ConnTime:       statsSnap.ConnTime,
+			ConnTime:       statsSnap.ConnTime.Unix(),
+			PingTime:       float64(statsSnap.LastPingMicros),
 			TimeOffset:     statsSnap.TimeOffset,
 			Version:        statsSnap.Version,
 			SubVer:         statsSnap.UserAgent,
@@ -2304,7 +2305,6 @@ func handleGetPeerInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{})
 			BanScore:       0,
 			SyncNode:       p == syncPeer,
 		}
-		info.PingTime = float64(statsSnap.LastPingMicros)
 		if p.LastPingNonce() != 0 {
 			wait := float64(time.Now().Sub(statsSnap.LastPingTime).Nanoseconds())
 			// We actually want microseconds.

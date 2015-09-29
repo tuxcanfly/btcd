@@ -4,9 +4,9 @@
 package peer_test
 
 import (
+	"bytes"
 	"errors"
 	"io"
-	"os"
 	"testing"
 
 	"github.com/btcsuite/btcd/peer"
@@ -27,19 +27,19 @@ func TestSetLogWriter(t *testing.T) {
 		},
 		{
 			name:     "invalid log level",
-			w:        os.Stdout,
+			w:        bytes.NewBuffer(nil),
 			level:    "wrong",
 			expected: errors.New("invalid log level"),
 		},
 		{
 			name:     "use off level",
-			w:        os.Stdout,
+			w:        bytes.NewBuffer(nil),
 			level:    "off",
 			expected: errors.New("min level can't be greater than max. Got min: 6, max: 5"),
 		},
 		{
 			name:     "pass",
-			w:        os.Stdout,
+			w:        bytes.NewBuffer(nil),
 			level:    "debug",
 			expected: nil,
 		},

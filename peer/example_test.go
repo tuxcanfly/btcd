@@ -5,139 +5,107 @@
 package peer_test
 
 import (
-	"errors"
 	"fmt"
-	"log"
 	"net"
 	"time"
 
-	"github.com/btcsuite/btcd/addrmgr"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 )
 
-// lookupFunc is a callback which resolves IPs from the provided host string.
-// In this example, a standard "ip:port" hostname is used, therefore this func
-// is not implemented.
-func lookupFunc(host string) ([]net.IP, error) {
-	return nil, errors.New("not implemented")
-}
-
-// newestSha returns the latest known block to this peer.
-// In this example, it returns a hard-coded hash and height.
-func newestSha() (*wire.ShaHash, int32, error) {
-	hashStr := "14a0810ac680a3eb3f82edc878cea25ec41d6b790744e5daeef"
-	hash, err := wire.NewShaHashFromStr(hashStr)
-	if err != nil {
-		return nil, 0, err
-	}
-	return hash, 234439, nil
-}
-
-// This example demonstrates initializing both inbound and outbound peers.  An
-// inbound peer listening on simnet port i.e 18555 is started first, then an
-// outbound peer is connected to it.
-// Peers negotiate protocol by exchanging version and verack messages.  For
-// demonstration, a simple handler for version message is attached to both
-// peers.
-func Example_peerConnection() {
-	addrMgr := addrmgr.New("test", lookupFunc)
-	// Configure peers to act as a simnet full node.
+// mockRemotePeer creates a basic inbound peer listening on the simnet port for
+// use with Example_peerConnection.  It does not return until the listner is
+// active.
+func mockRemotePeer() error {
+	// Configure peer to act as a simnet node that offers no services.
 	peerCfg := &peer.Config{
-		// Way to get the latest known block to this peer.
-		NewestBlock: newestSha,
-		// Way to get the most appropriate local address.
-		BestLocalAddress: addrMgr.GetBestLocalAddress,
-		// User agent details to advertise.
-		UserAgentName:    "peer",
-		UserAgentVersion: "1.0",
-		// Network and service flag to use.
-		Net:      wire.SimNet,
-		Services: wire.SFNodeNetwork,
+		UserAgentName:    "peer",  // User agent name to advertise.
+		UserAgentVersion: "1.0.0", // User agent version to advertise.
+		ChainParams:      &chaincfg.SimNetParams,
 	}
-	// Chan to sync the outbound and inbound peers.
-	listening := make(chan error)
+
+	// Accept connections on the simnet port.
+	listener, err := net.Listen("tcp", "127.0.0.1:18555")
+	if err != nil {
+		return err
+	}
 	go func() {
-		// Accept connections on the simnet port.
-		l1, err := net.Listen("tcp", "127.0.0.1:18555")
+		conn, err := listener.Accept()
 		if err != nil {
-			listening <- err
+			fmt.Printf("Accept: error %v\n", err)
 			return
 		}
-		// Signal that we are listening for connections.
-		listening <- nil
-		c1, err := l1.Accept()
-		if err != nil {
-			log.Fatalf("Listen: error %v\n", err)
-		}
 
-		// Get a nonce for the inbound peer.
-		nonce, err := wire.RandomUint64()
-		if err != nil {
-			log.Fatalf("wire.RandomUint64 err: %v", err)
-		}
-		// Start the inbound peer.
-		p1 := peer.NewInboundPeer(peerCfg, nonce, c1)
-		// Add a listener for version message.
-		// Listeners are identified by the provided string so they can be
-		// removed later, if required.
-		p1.AddVersionMsgListener("handleVersionMsg", func(p *peer.Peer, msg *wire.MsgVersion) {
-			fmt.Println("inbound: received version")
-		})
-		err = p1.Start()
-		if err != nil {
+		// Create and start the inbound peer.
+		p := peer.NewInboundPeer(peerCfg, conn)
+		if err := p.Start(); err != nil {
 			fmt.Printf("Start: error %v\n", err)
 			return
 		}
 	}()
-	// Get a nonce for the outbound peer.
-	nonce, err := wire.RandomUint64()
-	if err != nil {
-		fmt.Printf("wire.RandomUint64 err: %v", err)
+
+	return nil
+}
+
+// This example demonstrates the basic process for initializing and creating an
+// outbound peer.  Peers negotiate by exchanging version and verack messages.
+// For demonstration, a simple handler for version message is attached to the
+// peer.
+func Example_newOutboundPeer() {
+	// Ordinarily this will not be needed since the outbound peer will be
+	// connecting to a remote peer, however, since this example is executed
+	// and tested, a mock remote peer is needed to listen for the outbound
+	// peer.
+	if err := mockRemotePeer(); err != nil {
+		fmt.Printf("mockRemotePeer: unexpected error %v\n", err)
 		return
 	}
-	// Get a network address for use with the outbound peer.
-	na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(18555), peerCfg.Services)
-	if err != nil {
-		fmt.Printf("HostToNetAddress: error %v\n", err)
-		return
-	}
-	// Wait until the inbound peer is listening for connections.
-	err = <-listening
-	if err != nil {
-		fmt.Printf("Listen: error %v\n", err)
-		return
-	}
-	// Start the outbound peer.
-	p2 := peer.NewOutboundPeer(peerCfg, nonce, na)
-	go func() {
-		conn, err := net.Dial("tcp", p2.Addr())
-		if err != nil {
-			fmt.Printf("btcDial: error %v\n", err)
-			return
-		}
-		if err := p2.Connect(conn); err != nil {
-			fmt.Printf("Connect: error %v\n", err)
-			return
-		}
-	}()
-	// Add a listener for version message.
-	p2.AddVersionMsgListener("handleVersionMsg", func(p *peer.Peer, msg *wire.MsgVersion) {
-		fmt.Println("outbound: received version")
-	})
-	// Wait until verack is received to finish the handshake. To do this, we
-	// add a verack listener on the outbound peer and use a chan to sync.
+
+	// Create an outbound peer that is configured to act as a simnet node
+	// that offers no services and has listeners for the version and verack
+	// messages.  The verack listener is used here to signal the code below
+	// when the handshake has been finished by signalling a channel.
 	verack := make(chan struct{})
-	p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-		verack <- struct{}{}
-	})
-	// In case something goes wrong, timeout.
+	peerCfg := &peer.Config{
+		UserAgentName:    "peer",  // User agent name to advertise.
+		UserAgentVersion: "1.0.0", // User agent version to advertise.
+		ChainParams:      &chaincfg.SimNetParams,
+		Services:         0,
+		Listeners: peer.MessageListeners{
+			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) {
+				fmt.Println("outbound: received version")
+			},
+			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+				verack <- struct{}{}
+			},
+		},
+	}
+	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(18555),
+		peerCfg.Services)
+	p := peer.NewOutboundPeer(peerCfg, na)
+
+	// Establish the connection to the peer address and mark it connected.
+	conn, err := net.Dial("tcp", p.Addr())
+	if err != nil {
+		fmt.Printf("net.Dial: error %v\n", err)
+		return
+	}
+	if err := p.Connect(conn); err != nil {
+		fmt.Printf("Connect: error %v\n", err)
+		return
+	}
+
+	// Wait for the verack message or timeout in case of failure.
 	select {
 	case <-verack:
 	case <-time.After(time.Second * 1):
 		fmt.Printf("Example_peerConnection: verack timeout")
 	}
+
+	// Shutdown the peer.
+	p.Shutdown()
+
 	// Output:
-	// inbound: received version
 	// outbound: received version
 }
