@@ -105,8 +105,7 @@ func TestOutboundPeer(t *testing.T) {
 	c := &conn{raddr: "127.0.0.1:8333", Writer: w, Reader: r}
 
 	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(8333), 0)
-	p := peer.NewOutboundPeer(peerCfg, 1, na)
-
+	p := peer.NewOutboundPeer(peerCfg, na)
 	if p.NA() != na {
 		t.Errorf("TestOutboundPeer: wrong NA - got %v, want %v", p.NA(), na)
 		return
@@ -141,7 +140,7 @@ func TestOutboundPeer(t *testing.T) {
 
 	// Reset NewestBlock to normal Start
 	peerCfg.NewestBlock = newestSha
-	p1 := peer.NewOutboundPeer(peerCfg, 1, na)
+	p1 := peer.NewOutboundPeer(peerCfg, na)
 	if err := p1.Connect(c); err != nil {
 		t.Errorf("Connect: unexpected err %v\n", err)
 		return
@@ -167,7 +166,7 @@ func TestOutboundPeer(t *testing.T) {
 
 	// Test regression
 	peerCfg.RegressionTest = true
-	p2 := peer.NewOutboundPeer(peerCfg, 1, na)
+	p2 := peer.NewOutboundPeer(peerCfg, na)
 	if err := p2.Connect(c); err != nil {
 		t.Errorf("Connect: unexpected err %v\n", err)
 		return

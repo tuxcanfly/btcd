@@ -102,7 +102,6 @@ type updatePeerHeightsMsg struct {
 // server provides a bitcoin server for handling communications to and from
 // bitcoin peers.
 type server struct {
-	nonce                uint64
 	listeners            []net.Listener
 	chainParams          *chaincfg.Params
 	started              int32      // atomic
@@ -1386,8 +1385,7 @@ func (s *server) listenHandler(listener net.Listener) {
 			Net:              s.chainParams.Net,
 			Services:         wire.SFNodeNetwork,
 		}
-		p := peer.NewInboundPeer(peerCfg, s.nonce, conn)
-		s.AddPeer(p)
+		s.AddPeer(peer.NewInboundPeer(peerCfg, conn))
 	}
 	s.wg.Done()
 	srvrLog.Tracef("Listener handler done for %s", listener.Addr())
@@ -1474,8 +1472,7 @@ func (s *server) addPeer(addr string) *peer.Peer {
 		return nil
 	}
 
-	p := peer.NewOutboundPeer(peerCfg, s.nonce, na)
-	return p
+	return peer.NewOutboundPeer(peerCfg, na)
 }
 
 // establishConn establishes a connection to the peer.
@@ -2122,11 +2119,6 @@ out:
 // bitcoin network type specified by chainParams.  Use start to begin accepting
 // connections from peers.
 func newServer(listenAddrs []string, db database.Db, chainParams *chaincfg.Params) (*server, error) {
-	nonce, err := wire.RandomUint64()
-	if err != nil {
-		return nil, err
-	}
-
 	services := defaultServices
 	if cfg.NoPeerBloomFilters {
 		services &^= wire.SFNodeBloom
@@ -2259,7 +2251,6 @@ func newServer(listenAddrs []string, db database.Db, chainParams *chaincfg.Param
 	}
 
 	s := server{
-		nonce:                nonce,
 		listeners:            listeners,
 		chainParams:          chainParams,
 		addrManager:          amgr,

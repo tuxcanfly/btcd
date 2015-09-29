@@ -1674,10 +1674,14 @@ func (p *Peer) WaitForShutdown() {
 	<-p.quit
 }
 
-// newPeerBase returns a new base bitcoin peer for the provided server and
-// inbound flag.  This is used by the NewInboundPeer and NewOutboundPeer
-// functions to perform base setup needed by both types of peers.
-func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
+// peerNonce is a nonce assigned to all peers created with this package.  It
+// is randomly generated at init time.
+var peerNonce uint64
+
+// newPeerBase returns a new base bitcoin peer based on the inbound flag.  This
+// is used by the NewInboundPeer and NewOutboundPeer functions to perform base
+// setup needed by both types of peers.
+func newPeerBase(cfg *Config, inbound bool) *Peer {
 	// If provided, use the configured version, else default to the max
 	// supported version.
 	var protocolVersion uint32
@@ -1699,7 +1703,7 @@ func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
 		quit:               make(chan struct{}),
 		stats:              stats{},
 		newestSha:          cfg.NewestBlock,
-		nonce:              nonce,
+		nonce:              peerNonce,
 		cfg:                cfg,
 		services:           cfg.Services,
 		protocolVersion:    protocolVersion,
@@ -1709,8 +1713,8 @@ func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
 
 // NewInboundPeer returns a new inbound bitcoin peer. Use Start to begin
 // processing incoming and outgoing messages.
-func NewInboundPeer(cfg *Config, nonce uint64, conn net.Conn) *Peer {
-	p := newPeerBase(cfg, nonce, true)
+func NewInboundPeer(cfg *Config, conn net.Conn) *Peer {
+	p := newPeerBase(cfg, true)
 	p.conn = conn
 	p.addr = conn.RemoteAddr().String()
 	p.timeConnected = time.Now()
@@ -1719,9 +1723,19 @@ func NewInboundPeer(cfg *Config, nonce uint64, conn net.Conn) *Peer {
 }
 
 // NewOutboundPeer returns a new outbound bitcoin peer.
-func NewOutboundPeer(cfg *Config, nonce uint64, na *wire.NetAddress) *Peer {
-	p := newPeerBase(cfg, nonce, false)
+func NewOutboundPeer(cfg *Config, na *wire.NetAddress) *Peer {
+	p := newPeerBase(cfg, false)
 	p.na = na
 	p.addr = fmt.Sprintf("%v:%v", na.IP, na.Port)
 	return p
+}
+
+func init() {
+	// Generate a new random nonce that is assigned to all peers created by
+	// this package.
+	nonce, err := wire.RandomUint64()
+	if err != nil {
+		panic("failed to generate random peer nonce: " + err.Error())
+	}
+	peerNonce = nonce
 }
