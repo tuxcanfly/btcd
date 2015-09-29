@@ -50,7 +50,7 @@ func Example_peerConnection() {
 		UserAgentVersion: "1.0",
 		// Network and service flag to use.
 		Net:      wire.SimNet,
-		Services: wire.SFNodeNetwork,
+		Services: 0,
 	}
 	// Chan to sync the outbound and inbound peers.
 	listening := make(chan error)

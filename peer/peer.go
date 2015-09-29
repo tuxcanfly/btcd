@@ -327,22 +327,22 @@ func (p *Peer) SetBlockStallTimer(timeout time.Duration) {
 // UpdateLastBlockHeight updates the last known block for the peer. It is safe
 // for concurrent access.
 func (p *Peer) UpdateLastBlockHeight(newHeight int32) {
-	p.statsMtx.Lock()
-	defer p.statsMtx.Unlock()
-
 	log.Tracef("Updating last block height of peer %v from %v to %v",
 		p.addr, p.lastBlock, newHeight)
+
+	p.statsMtx.Lock()
 	p.lastBlock = int32(newHeight)
+	p.statsMtx.Unlock()
 }
 
 // UpdateLastAnnouncedBlock updates meta-data about the last block sha this
 // peer is known to have announced. It is safe for concurrent access.
 func (p *Peer) UpdateLastAnnouncedBlock(blkSha *wire.ShaHash) {
-	p.statsMtx.Lock()
-	defer p.statsMtx.Unlock()
-
 	log.Tracef("Updating last blk for peer %v, %v", p.addr, blkSha)
+
+	p.statsMtx.Lock()
 	p.lastAnnouncedBlock = blkSha
+	p.statsMtx.Unlock()
 }
 
 // AddKnownInventory adds the passed inventory to the cache of known inventory
@@ -816,365 +816,323 @@ func (p *Peer) handleVersionMsg(msg *wire.MsgVersion) {
 
 	// Send verack.
 	p.QueueMessage(wire.NewMsgVerAck(), nil)
-
-	// TODO: Relay alerts.
 }
 
 // AddVersionMsgListener adds a listener which is invoked when a peer receives
 // a version bitcoin message.
 func (p *Peer) AddVersionMsgListener(key string, listener func(p *Peer, msg *wire.MsgVersion)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.versionMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveVersionMsgListener removes the version message listener with the given
 // key.
 func (p *Peer) RemoveVersionMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.versionMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddVerAckMsgListener adds a listener which is invoked when a peer receives
 // a verack bitcoin message.
 func (p *Peer) AddVerAckMsgListener(key string, listener func(p *Peer, msg *wire.MsgVerAck)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.verackMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveVerAckMsgListener removes the verack message listener with the given
 // key.
 func (p *Peer) RemoveVerAckMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.verackMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddGetAddrMsgListener adds a listener which is invoked when a peer receives
 // a getaddr bitcoin message.
 func (p *Peer) AddGetAddrMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetAddr)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.getAddrMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveGetAddrMsgListener removes the getaddr message listener with the given
 // key.
 func (p *Peer) RemoveGetAddrMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.getAddrMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddAddrMsgListener adds a listener which is invoked when a peer receives
 // a addr bitcoin message.
 func (p *Peer) AddAddrMsgListener(key string, listener func(p *Peer, msg *wire.MsgAddr)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.addrMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveAddrMsgListener removes the addr message listener with the given
 // key.
 func (p *Peer) RemoveAddrMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.addrMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddPingMsgListener adds a listener which is invoked when a peer receives
 // a ping bitcoin message.
 func (p *Peer) AddPingMsgListener(key string, listener func(p *Peer, msg *wire.MsgPing)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.pingMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemovePingMsgListener removes the ping message listener with the given
 // key.
 func (p *Peer) RemovePingMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.pingMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddPongMsgListener adds a listener which is invoked when a peer receives
 // a pong bitcoin message.
 func (p *Peer) AddPongMsgListener(key string, listener func(p *Peer, msg *wire.MsgPong)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.pongMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemovePongMsgListener removes the pong message listener with the given
 // key.
 func (p *Peer) RemovePongMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.pongMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddAlertMsgListener adds a listener which is invoked when a peer receives
 // a alert bitcoin message.
 func (p *Peer) AddAlertMsgListener(key string, listener func(p *Peer, msg *wire.MsgAlert)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.alertMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveAlertMsgListener removes the alert message listener with the given
 // key.
 func (p *Peer) RemoveAlertMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.alertMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddMemPoolMsgListener adds a listener which is invoked when a peer receives
 // a mempool bitcoin message.
 func (p *Peer) AddMemPoolMsgListener(key string, listener func(p *Peer, msg *wire.MsgMemPool)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.memPoolMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveMemPoolMsgListener removes the mempool message listener with the given
 // key.
 func (p *Peer) RemoveMemPoolMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.memPoolMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddTxMsgListener adds a listener which is invoked when a peer receives a tx
 // bitcoin message .
 func (p *Peer) AddTxMsgListener(key string, listener func(p *Peer, msg *wire.MsgTx)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.txMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveTxMsgListener removes the tx message listener with the given key.
 func (p *Peer) RemoveTxMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.txMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddBlockMsgListener adds a listener which is invoked when a peer receives a
 // block bitcoin message .
 func (p *Peer) AddBlockMsgListener(key string, listener func(p *Peer, msg *wire.MsgBlock, buf []byte)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.blockMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveBlockMsgListener removes the block message listener with the given key.
 func (p *Peer) RemoveBlockMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.blockMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddInvMsgListener adds a listener which is invoked when a peer receives a
 // inv bitcoin message .
 func (p *Peer) AddInvMsgListener(key string, listener func(p *Peer, msg *wire.MsgInv)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.invMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveInvMsgListener removes the inv message listener with the given key.
 func (p *Peer) RemoveInvMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.invMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddHeadersMsgListener adds a listener which is invoked when a peer receives
 // a headers bitcoin message .
 func (p *Peer) AddHeadersMsgListener(key string, listener func(p *Peer, msg *wire.MsgHeaders)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.headersMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveHeadersMsgListener removes the headers message listener with the given
 // key.
 func (p *Peer) RemoveHeadersMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.headersMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddNotFoundMsgListener adds a listener which is invoked when a peer receives
 // a not found bitcoin message .
 func (p *Peer) AddNotFoundMsgListener(key string, listener func(p *Peer, msg *wire.MsgNotFound)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.notFoundMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveNotFoundMsgListener removes the not found message listener with the given
 // key.
 func (p *Peer) RemoveNotFoundMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.notFoundMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddGetDataMsgListener adds a listener which is invoked when a peer receives
 // a getdata bitcoin message .
 func (p *Peer) AddGetDataMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetData)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.getDataMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveGetDataMsgListener removes the getdata message listener with the given
 // key.
 func (p *Peer) RemoveGetDataMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.getDataMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddGetBlocksMsgListener adds a listener which is invoked when a peer receives
 // a getblocks bitcoin message .
 func (p *Peer) AddGetBlocksMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetBlocks)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.getBlocksMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveGetBlocksMsgListener removes the getblocks message listener with the given
 // key.
 func (p *Peer) RemoveGetBlocksMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.getBlocksMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddGetHeadersMsgListener adds a listener which is invoked when a peer receives
 // a getheaders bitcoin message .
 func (p *Peer) AddGetHeadersMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetHeaders)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.getHeadersMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveGetHeadersMsgListener removes the getheaders message listener with the given
 // key.
 func (p *Peer) RemoveGetHeadersMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.getHeadersMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddFilterAddMsgListener adds a listener which is invoked when a peer
 // receives a filteradd bitcoin message .
 func (p *Peer) AddFilterAddMsgListener(key string, listener func(p *Peer, msg *wire.MsgFilterAdd)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.filterAddMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveFilterAddMsgListener removes the filteradd message listener with the
 // given key.
 func (p *Peer) RemoveFilterAddMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.filterAddMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddFilterClearMsgListener adds a listener which is invoked when a peer
 // receives a filterclear bitcoin message .
 func (p *Peer) AddFilterClearMsgListener(key string, listener func(p *Peer, msg *wire.MsgFilterClear)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.filterClearMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveFilterClearMsgListener removes the filterclear message listener with the
 // given key.
 func (p *Peer) RemoveFilterClearMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.filterClearMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddFilterLoadMsgListener adds a listener which is invoked when a peer
 // receives a filterload bitcoin message .
 func (p *Peer) AddFilterLoadMsgListener(key string, listener func(p *Peer, msg *wire.MsgFilterLoad)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.filterLoadMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveFilterLoadMsgListener removes the filterload message listener with the
 // given key.
 func (p *Peer) RemoveFilterLoadMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.filterLoadMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // AddRejectMsgListener adds a listener which is invoked when a peer receives
 // a reject bitcoin message.
 func (p *Peer) AddRejectMsgListener(key string, listener func(p *Peer, msg *wire.MsgReject)) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	p.rejectMsgListeners[key] = listener
+	p.listenerMtx.Unlock()
 }
 
 // RemoveRejectMsgListener removes the reject message listener with the given
 // key.
 func (p *Peer) RemoveRejectMsgListener(key string) {
 	p.listenerMtx.Lock()
-	defer p.listenerMtx.Unlock()
-
 	delete(p.rejectMsgListeners, key)
+	p.listenerMtx.Unlock()
 }
 
 // PushAddrMsg sends one, or more, addr message(s) to the connected peer using
