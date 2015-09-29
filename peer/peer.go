@@ -164,10 +164,6 @@ type outMsg struct {
 // stats is the collection of stats related to a peer.
 type stats struct {
 	statsMtx           sync.RWMutex // protects all statistics below here.
-	versionKnown       bool
-	protocolVersion    uint32
-	versionSent        bool
-	verAckReceived     bool
 	timeOffset         int64
 	timeConnected      time.Time
 	lastSend           time.Time
@@ -182,7 +178,7 @@ type stats struct {
 	lastPingMicros     int64     // Time for last ping to return.
 }
 
-// StatsSnap is a snapshot of peer stats at at point in time.
+// StatsSnap is a snapshot of peer stats at a point in time.
 type StatsSnap struct {
 	ID             int32
 	Addr           string
@@ -251,11 +247,15 @@ type Peer struct {
 	cfg     *Config
 	inbound bool
 
-	flagsMtx  sync.Mutex // protects the peer flags below
-	na        *wire.NetAddress
-	id        int32
-	userAgent string
-	services  wire.ServiceFlag
+	flagsMtx        sync.Mutex // protects the peer flags below
+	na              *wire.NetAddress
+	id              int32
+	userAgent       string
+	services        wire.ServiceFlag
+	versionKnown    bool
+	protocolVersion uint32
+	versionSent     bool
+	verAckReceived  bool
 
 	knownInventory     *MruInventoryMap
 	prevGetBlocksBegin *wire.ShaHash
@@ -351,7 +351,7 @@ func (p *Peer) AddKnownInventory(invVect *wire.InvVect) {
 	p.knownInventory.Add(invVect)
 }
 
-// StatsSnapshot returns a snapshot of the current peer statistics.
+// StatsSnapshot returns a snapshot of the current peer flags and statistics.
 func (p *Peer) StatsSnapshot() *StatsSnap {
 	p.statsMtx.RLock()
 	defer p.statsMtx.RUnlock()
@@ -361,6 +361,7 @@ func (p *Peer) StatsSnapshot() *StatsSnap {
 	addr := p.addr
 	userAgent := p.userAgent
 	services := p.services
+	protocolVersion := p.protocolVersion
 	p.flagsMtx.Unlock()
 
 	// Get a copy of all relevant flags and stats.
@@ -375,7 +376,7 @@ func (p *Peer) StatsSnapshot() *StatsSnap {
 		BytesRecv:      p.bytesReceived,
 		ConnTime:       p.timeConnected.Unix(),
 		TimeOffset:     p.timeOffset,
-		Version:        p.protocolVersion,
+		Version:        protocolVersion,
 		Inbound:        p.inbound,
 		StartingHeight: p.startingHeight,
 		LastBlock:      p.lastBlock,
@@ -465,8 +466,8 @@ func (p *Peer) LastPingMicros() int64 {
 // VersionKnown returns the whether or not the version of a peer is known
 // locally.  It is safe for concurrent access.
 func (p *Peer) VersionKnown() bool {
-	p.statsMtx.RLock()
-	defer p.statsMtx.RUnlock()
+	p.flagsMtx.Lock()
+	defer p.flagsMtx.Unlock()
 
 	return p.versionKnown
 }
@@ -474,8 +475,8 @@ func (p *Peer) VersionKnown() bool {
 // VerAckReceived returns whether or not a verack message was received by the
 // peer.  It is safe for concurrent accecss.
 func (p *Peer) VerAckReceived() bool {
-	p.statsMtx.RLock()
-	defer p.statsMtx.RUnlock()
+	p.flagsMtx.Lock()
+	defer p.flagsMtx.Unlock()
 
 	return p.verAckReceived
 }
@@ -483,8 +484,8 @@ func (p *Peer) VerAckReceived() bool {
 // ProtocolVersion returns the peer protocol version in a manner that is safe
 // for concurrent access.
 func (p *Peer) ProtocolVersion() uint32 {
-	p.statsMtx.RLock()
-	defer p.statsMtx.RUnlock()
+	p.flagsMtx.Lock()
+	defer p.flagsMtx.Unlock()
 
 	return p.protocolVersion
 }
@@ -766,11 +767,6 @@ func (p *Peer) handleVersionMsg(msg *wire.MsgVersion) {
 
 	// Updating a bunch of stats.
 	p.statsMtx.Lock()
-	// Negotiate the protocol version.
-	p.protocolVersion = minUint32(p.protocolVersion, uint32(msg.ProtocolVersion))
-	p.versionKnown = true
-	log.Debugf("Negotiated protocol version %d for peer %s",
-		p.protocolVersion, p)
 	p.lastBlock = msg.LastBlock
 	p.startingHeight = msg.LastBlock
 	// Set the peer's time offset.
@@ -779,6 +775,13 @@ func (p *Peer) handleVersionMsg(msg *wire.MsgVersion) {
 
 	// Update peer flags
 	p.flagsMtx.Lock()
+	log.Debugf("Negotiated protocol version %d for peer %s",
+		p.protocolVersion, p)
+	// Negotiate the protocol version.
+	p.protocolVersion = minUint32(p.protocolVersion, uint32(msg.ProtocolVersion))
+	p.versionKnown = true
+	log.Debugf("Negotiated protocol version %d for peer %s",
+		p.protocolVersion, p)
 	// Set the peer's ID.
 	p.id = atomic.AddInt32(&nodeCount, 1)
 	// Set the supported services for the peer to what the remote peer
@@ -1234,7 +1237,7 @@ func (p *Peer) handlePongMsg(msg *wire.MsgPong) {
 	// without large usage of the ping rpc call since we ping
 	// infrequently enough that if they overlap we would have timed out
 	// the peer.
-	if p.protocolVersion > wire.BIP0031Version &&
+	if p.ProtocolVersion() > wire.BIP0031Version &&
 		p.lastPingNonce != 0 && msg.Nonce == p.lastPingNonce {
 		p.lastPingMicros = time.Now().Sub(p.lastPingTime).Nanoseconds()
 		p.lastPingMicros /= 1000 // convert to usec.
@@ -1450,9 +1453,9 @@ out:
 			p.listenerMtx.Unlock()
 
 		case *wire.MsgVerAck:
-			p.statsMtx.RLock()
+			p.flagsMtx.Lock()
 			versionSent := p.versionSent
-			p.statsMtx.RUnlock()
+			p.flagsMtx.Unlock()
 
 			if !versionSent {
 				log.Infof("Received 'verack' from peer %v "+
@@ -1466,9 +1469,9 @@ out:
 					"peer %v -- disconnecting", p)
 				break out
 			}
-			p.statsMtx.Lock()
+			p.flagsMtx.Lock()
 			p.verAckReceived = true
-			p.statsMtx.Unlock()
+			p.flagsMtx.Unlock()
 
 			p.listenerMtx.Lock()
 			for key, listener := range p.verackMsgListeners {
@@ -1813,16 +1816,16 @@ out:
 			switch m := msg.msg.(type) {
 			case *wire.MsgVersion:
 				// should get a verack
-				p.statsMtx.Lock()
+				p.flagsMtx.Lock()
 				p.versionSent = true
-				p.statsMtx.Unlock()
+				p.flagsMtx.Unlock()
 			case *wire.MsgGetAddr:
 				// should get addresses
 			case *wire.MsgPing:
 				// expects pong
 				// Also set up statistics.
 				p.statsMtx.Lock()
-				if p.protocolVersion > wire.BIP0031Version {
+				if p.ProtocolVersion() > wire.BIP0031Version {
 					p.lastPingNonce = m.Nonce
 					p.lastPingTime = time.Now()
 				}
@@ -2042,13 +2045,12 @@ func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
 		outputInvChan:      make(chan *wire.InvVect, outputBufferSize),
 		blockStallActivate: make(chan time.Duration),
 		quit:               make(chan struct{}),
-		stats: stats{
-			protocolVersion: protocolVersion,
-		},
-		newestSha: cfg.NewestBlock,
-		nonce:     nonce,
-		cfg:       cfg,
-		services:  cfg.Services,
+		stats:              stats{},
+		newestSha:          cfg.NewestBlock,
+		nonce:              nonce,
+		cfg:                cfg,
+		services:           cfg.Services,
+		protocolVersion:    protocolVersion,
 
 		getAddrMsgListeners:     make(map[string]func(*Peer, *wire.MsgGetAddr)),
 		addrMsgListeners:        make(map[string]func(*Peer, *wire.MsgAddr)),
