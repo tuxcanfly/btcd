@@ -24,7 +24,7 @@ import (
 
 const (
 	// MaxProtocolVersion is the max protocol version the peer supports.
-	MaxProtocolVersion = 70002
+	MaxProtocolVersion = 70011
 
 	// BlockStallTimeout is the number of seconds we will wait for a
 	// "block" response after we send out a "getdata" for an announced

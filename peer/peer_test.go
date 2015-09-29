@@ -130,10 +130,10 @@ func TestPeerConnection(t *testing.T) {
 	wantStats := peerStats{
 		wantID:              0,
 		wantAddr:            "127.0.0.1:8333",
-		wantUserAgent:       "/btcwire:0.2.1/peer:1.0/",
+		wantUserAgent:       wire.DefaultUserAgent + "peer:1.0/",
 		wantInbound:         true,
 		wantServices:        wire.SFNodeNetwork,
-		wantProtocolVersion: uint32(70002),
+		wantProtocolVersion: peer.MaxProtocolVersion,
 		wantConnected:       true,
 		wantVersionKnown:    true,
 		wantVerAckReceived:  true,

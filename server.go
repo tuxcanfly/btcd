@@ -765,6 +765,10 @@ func (s *server) handleGetHeadersMsg(p *peer.Peer, msg *wire.MsgGetHeaders) {
 // filter.  The peer will be disconnected if a filter is not loaded when this
 // message is received.
 func (s *server) handleFilterAddMsg(p *peer.Peer, msg *wire.MsgFilterAdd) {
+	if !isValidBIP0111(p, msg.Command()) {
+		return
+	}
+
 	pInfo, err := s.blockManager.peerInfo(p)
 	if err != nil {
 		bmgrLog.Errorf("%v", err)
@@ -785,6 +789,10 @@ func (s *server) handleFilterAddMsg(p *peer.Peer, msg *wire.MsgFilterAdd) {
 // The peer will be disconnected if a filter is not loaded when this message is
 // received.
 func (s *server) handleFilterClearMsg(p *peer.Peer, msg *wire.MsgFilterClear) {
+	if !isValidBIP0111(p, msg.Command()) {
+		return
+	}
+
 	pInfo, err := s.blockManager.peerInfo(p)
 	if err != nil {
 		bmgrLog.Errorf("%v", err)
@@ -803,6 +811,10 @@ func (s *server) handleFilterClearMsg(p *peer.Peer, msg *wire.MsgFilterClear) {
 // message and it used to load a bloom filter that should be used for
 // delivering merkle blocks and associated transactions that match the filter.
 func (s *server) handleFilterLoadMsg(p *peer.Peer, msg *wire.MsgFilterLoad) {
+	if !isValidBIP0111(p, msg.Command()) {
+		return
+	}
+
 	pInfo, err := s.blockManager.peerInfo(p)
 	if err != nil {
 		bmgrLog.Errorf("%v", err)
@@ -916,6 +928,24 @@ func (s *server) handleAddrMsg(p *peer.Peer, msg *wire.MsgAddr) {
 	// XXX bitcoind gives a 2 hour time penalty here, do we want to do the
 	// same?
 	s.addrManager.AddAddresses(msg.AddrList, p.NA())
+}
+
+// isValidBIP0111 is a helper function for the bloom filter commands to check
+// BIP0111 compliance.
+func isValidBIP0111(p *peer.Peer, cmd string) bool {
+	if p.Services()&wire.SFNodeBloom != wire.SFNodeBloom {
+		if p.ProtocolVersion() >= wire.BIP0111Version {
+			peerLog.Debugf("%s sent an unsupported %s "+
+				"request -- disconnecting", p, cmd)
+			p.Disconnect()
+		} else {
+			peerLog.Debugf("Ignoring %s request from %s -- bloom "+
+				"support is disabled", cmd, p)
+		}
+		return false
+	}
+
+	return true
 }
 
 // registerListeners registers peer message listeners
