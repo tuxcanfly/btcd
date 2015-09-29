@@ -11,7 +11,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/btcsuite/btcd/addrmgr"
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 )
@@ -41,13 +40,11 @@ func newestSha() (*wire.ShaHash, int32, error) {
 // demonstration, a simple handler for version message is attached to both
 // peers.
 func Example_peerConnection() {
-	addrMgr := addrmgr.New("test", lookupFunc)
 	// Configure peers to act as a simnet full node.
 	peerCfg := &peer.Config{
 		// Way to get the latest known block to this peer.
 		NewestBlock: newestSha,
 		// Way to get the most appropriate local address.
-		BestLocalAddress: addrMgr.GetBestLocalAddress,
 		// User agent details to advertise.
 		UserAgentName:    "peer",
 		UserAgentVersion: "1.0",
@@ -96,12 +93,7 @@ func Example_peerConnection() {
 		fmt.Printf("wire.RandomUint64 err: %v", err)
 		return
 	}
-	// Get a network address for use with the outbound peer.
-	na, err := addrMgr.HostToNetAddress("127.0.0.1", uint16(18555), peerCfg.Services)
-	if err != nil {
-		fmt.Printf("HostToNetAddress: error %v\n", err)
-		return
-	}
+	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(18555), peerCfg.Services)
 	// Wait until the inbound peer is listening for connections.
 	err = <-listening
 	if err != nil {
@@ -113,7 +105,7 @@ func Example_peerConnection() {
 	go func() {
 		conn, err := net.Dial("tcp", p2.Addr())
 		if err != nil {
-			fmt.Printf("btcDial: error %v\n", err)
+			fmt.Printf("net.Dial: error %v\n", err)
 			return
 		}
 		if err := p2.Connect(conn); err != nil {
