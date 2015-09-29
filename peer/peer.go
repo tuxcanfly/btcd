@@ -1057,6 +1057,28 @@ func (p *Peer) isAllowedByRegression(err error) bool {
 	return true
 }
 
+// shouldHandleReadError returns whether or not the passed error, which is
+// expected to have come from reading from the remote peer in the inHandler,
+// should be logged and responded to with a reject message.
+func (p *Peer) shouldHandleReadError(err error) bool {
+	// No logging or reject message when the peer is being forcibly
+	// disconnected.
+	if atomic.LoadInt32(&p.disconnect) != 0 {
+		return false
+	}
+
+	// No logging or reject message when the remote peer has been
+	// disconnected.
+	if err == io.EOF {
+		return false
+	}
+	if opErr, ok := err.(*net.OpError); ok && !opErr.Temporary() {
+		return false
+	}
+
+	return true
+}
+
 // inHandler handles all incoming messages for the peer.  It must be run as a
 // goroutine.
 func (p *Peer) inHandler() {
@@ -1087,32 +1109,25 @@ out:
 				continue
 			}
 
-			// Only log the error and possibly send reject message
-			// if we're not forcibly disconnecting.
-			if atomic.LoadInt32(&p.disconnect) == 0 {
+			// Only log the error and send reject message if the
+			// local peer is not forcibly disconnecting and the
+			// remote peer has not disconnected.
+			if p.shouldHandleReadError(err) {
 				errMsg := fmt.Sprintf("Can't read message "+
 					"from %s: %v", p, err)
 				log.Errorf(errMsg)
 
-				// Only send the reject message if it's not
-				// because the remote client disconnected.
-				if err != io.EOF {
-					// Push a reject message for the
-					// malformed message and wait for the
-					// message to be sent before
-					// disconnecting.
-					//
-					// NOTE: Ideally this would include the
-					// command in the header if at least
-					// that much of the message was valid,
-					// but that is not currently exposed by
-					// wire, so just used malformed for the
-					// command.
-					p.PushRejectMsg("malformed",
-						wire.RejectMalformed, errMsg,
-						nil, true)
-				}
-
+				// Push a reject message for the malformed
+				// message and wait for the message to be sent
+				// before disconnecting.
+				//
+				// NOTE: Ideally this would include the command
+				// in the header if at least that much of the
+				// message was valid, but that is not currently
+				// exposed by wire, so just used malformed for
+				// the command.
+				p.PushRejectMsg("malformed",
+					wire.RejectMalformed, errMsg, nil, true)
 			}
 			break out
 		}
