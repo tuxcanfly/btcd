@@ -613,7 +613,7 @@ func (p *Peer) LastRecv() time.Time {
 	return p.lastRecv
 }
 
-// BytesSent returns the bytes sent by the peer.
+// BytesSent returns the total number of bytes sent by the peer.
 //
 // This function is safe for concurrent access.
 func (p *Peer) BytesSent() uint64 {
@@ -623,7 +623,7 @@ func (p *Peer) BytesSent() uint64 {
 	return p.bytesSent
 }
 
-// BytesReceived returns the bytes received by the peer.
+// BytesReceived returns the total number of bytes received by the peer.
 //
 // This function is safe for concurrent access.
 func (p *Peer) BytesReceived() uint64 {
@@ -643,7 +643,9 @@ func (p *Peer) TimeConnected() time.Time {
 	return p.timeConnected
 }
 
-// TimeOffset returns the time offset from the peer.
+// TimeOffset returns the number of seconds the local time was offset from the
+// time the peer reported during the initial negotiation phase.  Negative values
+// indicate the remote peer's time is before the local time.
 //
 // This function is safe for concurrent access.
 func (p *Peer) TimeOffset() int64 {
@@ -653,7 +655,8 @@ func (p *Peer) TimeOffset() int64 {
 	return p.timeOffset
 }
 
-// StartingHeight returns the starting height of the peer.
+// StartingHeight returns the last known height the peer reported during the
+// initial negotiation phase.
 //
 // This function is safe for concurrent access.
 func (p *Peer) StartingHeight() int32 {
@@ -978,14 +981,14 @@ func (p *Peer) PushAddrMsg(addresses []*wire.NetAddress) error {
 // message.  For older clients, it does nothing and anything other than failure
 // is considered a successful ping.
 func (p *Peer) handlePingMsg(msg *wire.MsgPing) {
-	// Only Reply with pong is message comes from a new enough client.
+	// Only reply with pong if the message is from a new enough client.
 	if p.ProtocolVersion() > wire.BIP0031Version {
 		// Include nonce from ping so pong can be identified.
 		p.QueueMessage(wire.NewMsgPong(msg.Nonce), nil)
 	}
 }
 
-// handlePongMsg is invoked when a peer received a pong bitcoin message.
+// handlePongMsg is invoked when a peer receives a pong bitcoin message.  For
 // recent clients (protocol version > BIP0031Version), and if we had send a ping
 // previosuly we update our ping time statistics. If the client is too old or
 // we had not send a ping we ignore it.
@@ -998,11 +1001,11 @@ func (p *Peer) handlePongMsg(msg *wire.MsgPong) {
 	// the times of each ping. For now we just make a best effort and
 	// only record stats if it was for the last ping sent. Any preceding
 	// and overlapping pings will be ignored. It is unlikely to occur
-	// without large usage of the ping rpc call since we ping
-	// infrequently enough that if they overlap we would have timed out
-	// the peer.
-	if p.ProtocolVersion() > wire.BIP0031Version &&
-		p.lastPingNonce != 0 && msg.Nonce == p.lastPingNonce {
+	// without large usage of the ping rpc call since we ping infrequently
+	// enough that if they overlap we would have timed out the peer.
+	if p.ProtocolVersion() > wire.BIP0031Version && p.lastPingNonce != 0 &&
+		msg.Nonce == p.lastPingNonce {
+
 		p.lastPingMicros = time.Now().Sub(p.lastPingTime).Nanoseconds()
 		p.lastPingMicros /= 1000 // convert to usec.
 		p.lastPingNonce = 0
@@ -1044,7 +1047,7 @@ func (p *Peer) readMessage() (wire.Message, []byte, error) {
 	return msg, buf, nil
 }
 
-// writeMessage sends a bitcoin Message to the peer with logging.
+// writeMessage sends a bitcoin message to the peer with logging.
 func (p *Peer) writeMessage(msg wire.Message) {
 	// Don't do anything if we're disconnecting.
 	if atomic.LoadInt32(&p.disconnect) != 0 {
