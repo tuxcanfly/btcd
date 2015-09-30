@@ -1727,7 +1727,7 @@ func (p *Peer) Disconnect() {
 		return
 	}
 
-	log.Tracef("disconnecting %s", p)
+	log.Tracef("Disconnecting %s", p)
 	if atomic.LoadInt32(&p.connected) != 0 {
 		p.conn.Close()
 	}
