@@ -191,7 +191,9 @@ type Config struct {
 	// Services flag to be advertised in peer messages.
 	Services wire.ServiceFlag
 
-	// Protocol version to use.
+	// ProtocolVersion specifies the maximum protocol version to use and
+	// advertise.  This field can be omitted in which case
+	// peer.MaxProtocolVersion will be used.
 	ProtocolVersion uint32
 }
 
@@ -1775,13 +1777,11 @@ func (p *Peer) WaitForShutdown() {
 // is used by the NewInboundPeer and NewOutboundPeer functions to perform base
 // setup needed by both types of peers.
 func newPeerBase(cfg *Config, inbound bool) *Peer {
-	// If provided, use the configured version, else default to the max
-	// supported version.
-	var protocolVersion uint32
+	// Default to the max supported protocol version.  Override to the
+	// version specified by the caller if configured.
+	protocolVersion := uint32(MaxProtocolVersion)
 	if cfg.ProtocolVersion != 0 {
 		protocolVersion = cfg.ProtocolVersion
-	} else {
-		protocolVersion = MaxProtocolVersion
 	}
 
 	// Set the chain parameters to testnet if the caller did not specify
