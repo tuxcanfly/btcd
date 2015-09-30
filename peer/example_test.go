@@ -5,7 +5,6 @@
 package peer_test
 
 import (
-	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -13,13 +12,6 @@ import (
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 )
-
-// lookupFunc is a callback which resolves IPs from the provided host string.
-// In this example, a standard "ip:port" hostname is used, therefore this func
-// is not implemented.
-func lookupFunc(host string) ([]net.IP, error) {
-	return nil, errors.New("not implemented")
-}
 
 // mockRemotePeer creates a basic inbound peer listening on the simnet port for
 // use with Example_peerConnection.  It does not return until the listner is

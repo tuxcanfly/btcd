@@ -85,6 +85,13 @@ func pipe(c1, c2 *conn) (*conn, *conn) {
 	return c1, c2
 }
 
+// lookupFunc is a callback which resolves IPs from the provided host string.
+// In this example, a standard "ip:port" hostname is used, therefore this func
+// is not implemented.
+func lookupFunc(host string) ([]net.IP, error) {
+	return nil, errors.New("not implemented")
+}
+
 // newestSha returns the latest known block to this peer.
 // In this example, it returns a hard-coded hash and height.
 func newestSha() (*wire.ShaHash, int32, error) {
