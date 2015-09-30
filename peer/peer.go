@@ -385,10 +385,9 @@ func (p *Peer) SetBlockStallTimer(timeout time.Duration) {
 // UpdateLastBlockHeight updates the last known block for the peer. It is safe
 // for concurrent access.
 func (p *Peer) UpdateLastBlockHeight(newHeight int32) {
+	p.statsMtx.Lock()
 	log.Tracef("Updating last block height of peer %v from %v to %v",
 		p.addr, p.lastBlock, newHeight)
-
-	p.statsMtx.Lock()
 	p.lastBlock = int32(newHeight)
 	p.statsMtx.Unlock()
 }
