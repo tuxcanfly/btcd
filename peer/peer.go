@@ -77,13 +77,12 @@ var (
 	allowSelfConns bool
 )
 
-// MessageListeners defines callback function pointers to invoke with
-// message listeners.  Since all of the functions are nil by default, all
-// listeners are effectively ignored until their handlers are set to a
-// concrete callback.
+// MessageListeners defines callback function pointers to invoke with message
+// listeners.  Since all of the functions are nil by default, all listeners are
+// effectively ignored until their handlers are set to a concrete callback.
 //
 // NOTE: Unless otherwise documented, these listeners must NOT directly call any
-// blocking calls on the peer instance since the inHandler  goroutine blocks
+// blocking calls on the peer instance since the inHandler goroutine blocks
 // until the callback has completed.  Doing so will result in a deadlock
 // situation.
 type MessageListeners struct {
@@ -151,7 +150,7 @@ type MessageListeners struct {
 // Config is the struct to hold configuration options useful to Peer.
 type Config struct {
 	// Callback functions to be invoked on receiving peer messages.
-	Listeners *MessageListeners
+	Listeners MessageListeners
 
 	// Callback which returns the newest block details.  This can be nil
 	// in which case the peer will report a block height of 0.
@@ -1226,7 +1225,7 @@ out:
 		switch msg := rmsg.(type) {
 		case *wire.MsgVersion:
 			p.handleVersionMsg(msg)
-			if p.cfg.Listeners != nil && p.cfg.Listeners.VersionListener != nil {
+			if p.cfg.Listeners.VersionListener != nil {
 				p.cfg.Listeners.VersionListener(p, msg)
 			}
 
@@ -1250,29 +1249,29 @@ out:
 			p.flagsMtx.Lock()
 			p.verAckReceived = true
 			p.flagsMtx.Unlock()
-			if p.cfg.Listeners != nil && p.cfg.Listeners.VerAckListener != nil {
+			if p.cfg.Listeners.VerAckListener != nil {
 				p.cfg.Listeners.VerAckListener(p, msg)
 			}
 
 		case *wire.MsgGetAddr:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.GetAddrListener != nil {
+			if p.cfg.Listeners.GetAddrListener != nil {
 				p.cfg.Listeners.GetAddrListener(p, msg)
 			}
 
 		case *wire.MsgAddr:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.AddrListener != nil {
+			if p.cfg.Listeners.AddrListener != nil {
 				p.cfg.Listeners.AddrListener(p, msg)
 			}
 
 		case *wire.MsgPing:
 			p.handlePingMsg(msg)
-			if p.cfg.Listeners != nil && p.cfg.Listeners.PingListener != nil {
+			if p.cfg.Listeners.PingListener != nil {
 				p.cfg.Listeners.PingListener(p, msg)
 			}
 
 		case *wire.MsgPong:
 			p.handlePongMsg(msg)
-			if p.cfg.Listeners != nil && p.cfg.Listeners.PongListener != nil {
+			if p.cfg.Listeners.PongListener != nil {
 				p.cfg.Listeners.PongListener(p, msg)
 			}
 
@@ -1281,17 +1280,17 @@ out:
 			// not signed with its key.  We could verify against their key, but
 			// since the reference client is currently unwilling to support
 			// other implementions' alert messages, we will not relay theirs.
-			if p.cfg.Listeners != nil && p.cfg.Listeners.AlertListener != nil {
+			if p.cfg.Listeners.AlertListener != nil {
 				p.cfg.Listeners.AlertListener(p, msg)
 			}
 
 		case *wire.MsgMemPool:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.MemPoolListener != nil {
+			if p.cfg.Listeners.MemPoolListener != nil {
 				p.cfg.Listeners.MemPoolListener(p, msg)
 			}
 
 		case *wire.MsgTx:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.TxListener != nil {
+			if p.cfg.Listeners.TxListener != nil {
 				p.cfg.Listeners.TxListener(p, msg)
 			}
 
@@ -1299,57 +1298,57 @@ out:
 			if p.blockStallCancel != nil {
 				close(p.blockStallCancel)
 			}
-			if p.cfg.Listeners != nil && p.cfg.Listeners.BlockListener != nil {
+			if p.cfg.Listeners.BlockListener != nil {
 				p.cfg.Listeners.BlockListener(p, msg, buf)
 			}
 
 		case *wire.MsgInv:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.InvListener != nil {
+			if p.cfg.Listeners.InvListener != nil {
 				p.cfg.Listeners.InvListener(p, msg)
 			}
 
 		case *wire.MsgHeaders:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.HeadersListener != nil {
+			if p.cfg.Listeners.HeadersListener != nil {
 				p.cfg.Listeners.HeadersListener(p, msg)
 			}
 
 		case *wire.MsgNotFound:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.NotFoundListener != nil {
+			if p.cfg.Listeners.NotFoundListener != nil {
 				p.cfg.Listeners.NotFoundListener(p, msg)
 			}
 
 		case *wire.MsgGetData:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.GetDataListener != nil {
+			if p.cfg.Listeners.GetDataListener != nil {
 				p.cfg.Listeners.GetDataListener(p, msg)
 			}
 
 		case *wire.MsgGetBlocks:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.GetBlocksListener != nil {
+			if p.cfg.Listeners.GetBlocksListener != nil {
 				p.cfg.Listeners.GetBlocksListener(p, msg)
 			}
 
 		case *wire.MsgGetHeaders:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.GetHeadersListener != nil {
+			if p.cfg.Listeners.GetHeadersListener != nil {
 				p.cfg.Listeners.GetHeadersListener(p, msg)
 			}
 
 		case *wire.MsgFilterAdd:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.FilterAddListener != nil {
+			if p.cfg.Listeners.FilterAddListener != nil {
 				p.cfg.Listeners.FilterAddListener(p, msg)
 			}
 
 		case *wire.MsgFilterClear:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.FilterClearListener != nil {
+			if p.cfg.Listeners.FilterClearListener != nil {
 				p.cfg.Listeners.FilterClearListener(p, msg)
 			}
 
 		case *wire.MsgFilterLoad:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.FilterLoadListener != nil {
+			if p.cfg.Listeners.FilterLoadListener != nil {
 				p.cfg.Listeners.FilterLoadListener(p, msg)
 			}
 
 		case *wire.MsgReject:
-			if p.cfg.Listeners != nil && p.cfg.Listeners.RejectListener != nil {
+			if p.cfg.Listeners.RejectListener != nil {
 				p.cfg.Listeners.RejectListener(p, msg)
 			}
 

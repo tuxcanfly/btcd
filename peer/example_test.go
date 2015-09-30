@@ -68,7 +68,7 @@ func Example_newOutboundPeer() {
 	// when the handshake has been finished by signalling a channel.
 	verack := make(chan struct{})
 	peerCfg := &peer.Config{
-		Listeners: &peer.MessageListeners{
+		Listeners: peer.MessageListeners{
 			VersionListener: func(p *peer.Peer, msg *wire.MsgVersion) {
 				fmt.Println("outbound: received version")
 			},
