@@ -69,10 +69,10 @@ func Example_newOutboundPeer() {
 	verack := make(chan struct{})
 	peerCfg := &peer.Config{
 		Listeners: peer.MessageListeners{
-			VersionListener: func(p *peer.Peer, msg *wire.MsgVersion) {
+			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) {
 				fmt.Println("outbound: received version")
 			},
-			VerAckListener: func(p *peer.Peer, msg *wire.MsgVerAck) {
+			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
 				verack <- struct{}{}
 			},
 		},
