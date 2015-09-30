@@ -265,12 +265,12 @@ type stats struct {
 type StatsSnap struct {
 	ID             int32
 	Addr           string
-	Services       string
-	LastSend       int64
-	LastRecv       int64
+	Services       wire.ServiceFlag
+	LastSend       time.Time
+	LastRecv       time.Time
 	BytesSent      uint64
 	BytesRecv      uint64
-	ConnTime       int64
+	ConnTime       time.Time
 	TimeOffset     int64
 	Version        uint32
 	UserAgent      string
@@ -426,12 +426,12 @@ func (p *Peer) StatsSnapshot() *StatsSnap {
 		ID:             id,
 		Addr:           addr,
 		UserAgent:      userAgent,
-		Services:       fmt.Sprintf("%08d", services),
-		LastSend:       p.lastSend.Unix(),
-		LastRecv:       p.lastRecv.Unix(),
+		Services:       services,
+		LastSend:       p.lastSend,
+		LastRecv:       p.lastRecv,
 		BytesSent:      p.bytesSent,
 		BytesRecv:      p.bytesReceived,
-		ConnTime:       p.timeConnected.Unix(),
+		ConnTime:       p.timeConnected,
 		TimeOffset:     p.timeOffset,
 		Version:        protocolVersion,
 		Inbound:        p.inbound,
