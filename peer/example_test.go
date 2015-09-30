@@ -40,18 +40,6 @@ func newestSha() (*wire.ShaHash, int32, error) {
 // demonstration, a simple handler for version message is attached to both
 // peers.
 func Example_peerConnection() {
-	// Configure peers to act as a simnet full node.
-	peerCfg := &peer.Config{
-		// Way to get the latest known block to this peer.
-		NewestBlock: newestSha,
-		// Way to get the most appropriate local address.
-		// User agent details to advertise.
-		UserAgentName:    "peer",
-		UserAgentVersion: "1.0",
-		// Network and service flag to use.
-		Net:      wire.SimNet,
-		Services: 0,
-	}
 	// Chan to sync the outbound and inbound peers.
 	listening := make(chan error)
 	go func() {
@@ -73,14 +61,24 @@ func Example_peerConnection() {
 		if err != nil {
 			log.Fatalf("wire.RandomUint64 err: %v", err)
 		}
+		peerCfg := &peer.Config{
+			Listeners: &peer.MessageListeners{
+				VersionListener: func(p *peer.Peer, msg *wire.MsgVersion) {
+					fmt.Println("inbound: received version")
+				},
+			},
+			// Way to get the latest known block to this peer.
+			NewestBlock: newestSha,
+			// Way to get the most appropriate local address.
+			// User agent details to advertise.
+			UserAgentName:    "peer",
+			UserAgentVersion: "1.0",
+			// Network and service flag to use.
+			Net:      wire.SimNet,
+			Services: 0,
+		}
 		// Start the inbound peer.
 		p1 := peer.NewInboundPeer(peerCfg, nonce, c1)
-		// Add a listener for version message.
-		// Listeners are identified by the provided string so they can be
-		// removed later, if required.
-		p1.AddVersionMsgListener("handleVersionMsg", func(p *peer.Peer, msg *wire.MsgVersion) {
-			fmt.Println("inbound: received version")
-		})
 		err = p1.Start()
 		if err != nil {
 			fmt.Printf("Start: error %v\n", err)
@@ -93,12 +91,34 @@ func Example_peerConnection() {
 		fmt.Printf("wire.RandomUint64 err: %v", err)
 		return
 	}
-	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(18555), peerCfg.Services)
+	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(18555), 0)
 	// Wait until the inbound peer is listening for connections.
 	err = <-listening
 	if err != nil {
 		fmt.Printf("Listen: error %v\n", err)
 		return
+	}
+	// Wait until verack is received to finish the handshake. To do this, we
+	// add a verack listener on the outbound peer and use a chan to sync.
+	verack := make(chan struct{})
+	peerCfg := &peer.Config{
+		Listeners: &peer.MessageListeners{
+			VerAckListener: func(p *peer.Peer, msg *wire.MsgVerAck) {
+				verack <- struct{}{}
+			},
+			VersionListener: func(p *peer.Peer, msg *wire.MsgVersion) {
+				fmt.Println("outbound: received version")
+			},
+		},
+		// Way to get the latest known block to this peer.
+		NewestBlock: newestSha,
+		// Way to get the most appropriate local address.
+		// User agent details to advertise.
+		UserAgentName:    "peer",
+		UserAgentVersion: "1.0",
+		// Network and service flag to use.
+		Net:      wire.SimNet,
+		Services: 0,
 	}
 	// Start the outbound peer.
 	p2 := peer.NewOutboundPeer(peerCfg, nonce, na)
@@ -113,16 +133,6 @@ func Example_peerConnection() {
 			return
 		}
 	}()
-	// Add a listener for version message.
-	p2.AddVersionMsgListener("handleVersionMsg", func(p *peer.Peer, msg *wire.MsgVersion) {
-		fmt.Println("outbound: received version")
-	})
-	// Wait until verack is received to finish the handshake. To do this, we
-	// add a verack listener on the outbound peer and use a chan to sync.
-	verack := make(chan struct{})
-	p2.AddVerAckMsgListener("handleVerAckMsg", func(p *peer.Peer, msg *wire.MsgVerAck) {
-		verack <- struct{}{}
-	})
 	// In case something goes wrong, timeout.
 	select {
 	case <-verack:

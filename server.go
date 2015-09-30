@@ -948,33 +948,24 @@ func (s *server) handleAddrMsg(p *peer.Peer, msg *wire.MsgAddr) {
 	s.addrManager.AddAddresses(msg.AddrList, p.NA())
 }
 
-// registerListeners registers peer message listeners
-func (s *server) registerListeners(p *peer.Peer) {
-	p.AddVersionMsgListener("handleVersionMsg", s.handleVersionMsg)
-	p.AddMemPoolMsgListener("handleMemPoolMsg", s.handleMemPoolMsg)
-	p.AddTxMsgListener("handleTxMsg", s.handleTxMsg)
-	p.AddBlockMsgListener("handleBlockMsg", s.handleBlockMsg)
-	p.AddInvMsgListener("handleInvMsg", s.handleInvMsg)
-	p.AddHeadersMsgListener("handleHeadersMsg", s.handleHeadersMsg)
-	p.AddGetDataMsgListener("handleGetDataMsg", s.handleGetDataMsg)
-	p.AddGetBlocksMsgListener("handleGetBlocksMsg", s.handleGetBlocksMsg)
-	p.AddGetHeadersMsgListener("handleGetHeadersMsg", s.handleGetHeadersMsg)
-	p.AddFilterAddMsgListener("handleFilterAddMsg", s.handleFilterAddMsg)
-	p.AddFilterClearMsgListener("handleFilterClearMsg", s.handleFilterClearMsg)
-	p.AddFilterLoadMsgListener("handleFilterLoadMsg", s.handleFilterLoadMsg)
-	p.AddGetAddrMsgListener("handleGetAddrMsg", s.handleGetAddrMsg)
-	p.AddAddrMsgListener("handleAddrMsg", s.handleAddrMsg)
-
-	// When peer gets shutdown, notify the server that it is done.
-	go func() {
-		p.WaitForShutdown()
-		s.donePeers <- p
-
-		// Only tell block manager we are gone if we ever told it we existed.
-		if p.VersionKnown() {
-			s.blockManager.DonePeer(p)
-		}
-	}()
+// peerListeners returns peer message listeners.
+func (s *server) peerListeners() *peer.MessageListeners {
+	return &peer.MessageListeners{
+		VersionListener:     s.handleVersionMsg,
+		MemPoolListener:     s.handleMemPoolMsg,
+		TxListener:          s.handleTxMsg,
+		BlockListener:       s.handleBlockMsg,
+		InvListener:         s.handleInvMsg,
+		HeadersListener:     s.handleHeadersMsg,
+		GetDataListener:     s.handleGetDataMsg,
+		GetBlocksListener:   s.handleGetBlocksMsg,
+		GetHeadersListener:  s.handleGetHeadersMsg,
+		FilterAddListener:   s.handleFilterAddMsg,
+		FilterClearListener: s.handleFilterClearMsg,
+		FilterLoadListener:  s.handleFilterLoadMsg,
+		GetAddrListener:     s.handleGetAddrMsg,
+		AddrListener:        s.handleAddrMsg,
+	}
 }
 
 func (p *peerState) Count() int {
@@ -1385,6 +1376,7 @@ func (s *server) listenHandler(listener net.Listener) {
 			continue
 		}
 		peerCfg := &peer.Config{
+			Listeners:        s.peerListeners(),
 			NewestBlock:      s.db.NewestSha,
 			BestLocalAddress: s.addrManager.GetBestLocalAddress,
 			Proxy:            cfg.Proxy,
@@ -1395,7 +1387,6 @@ func (s *server) listenHandler(listener net.Listener) {
 			Services:         wire.SFNodeNetwork,
 		}
 		p := peer.NewInboundPeer(peerCfg, s.nonce, conn)
-		s.registerListeners(p)
 		s.AddPeer(p)
 	}
 	s.wg.Done()
@@ -1452,6 +1443,7 @@ func (s *server) seedFromDNS() {
 // addPeer initializes a new outbound peer and setups the message listeners.
 func (s *server) addPeer(addr string) *peer.Peer {
 	peerCfg := &peer.Config{
+		Listeners:        s.peerListeners(),
 		NewestBlock:      s.db.NewestSha,
 		BestLocalAddress: s.addrManager.GetBestLocalAddress,
 		Proxy:            cfg.Proxy,
@@ -1483,7 +1475,6 @@ func (s *server) addPeer(addr string) *peer.Peer {
 	}
 
 	p := peer.NewOutboundPeer(peerCfg, s.nonce, na)
-	s.registerListeners(p)
 	return p
 }
 

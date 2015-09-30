@@ -68,8 +68,81 @@ var (
 	zeroHash wire.ShaHash
 )
 
+// MessageListeners defines callback function pointers to invoke with
+// message listeners.  Since all of the functions are nil by default, all
+// listeners are effectively ignored until their handlers are set to a
+// concrete callback.
+//
+// NOTE: Unless otherwise documented, these listeners must NOT directly call any
+// blocking calls on the peer instance since the inHandler  goroutine blocks
+// until the callback has completed.  Doing so will result in a deadlock
+// situation.
+type MessageListeners struct {
+	// GetAddrListener is invoked when a peer receives a getaddr bitcoin message.
+	GetAddrListener func(p *Peer, msg *wire.MsgGetAddr)
+
+	// AddrListener is invoked when a peer receives a addr bitcoin message.
+	AddrListener func(p *Peer, msg *wire.MsgAddr)
+
+	// PingListener is invoked when a peer receives a ping bitcoin message.
+	PingListener func(p *Peer, msg *wire.MsgPing)
+
+	// PongListener is invoked when a peer receives a pong bitcoin message.
+	PongListener func(p *Peer, msg *wire.MsgPong)
+
+	// AlertListener is invoked when a peer receives a alert bitcoin message.
+	AlertListener func(p *Peer, msg *wire.MsgAlert)
+
+	// MemPoolListener is invoked when a peer receives a mempool bitcoin message.
+	MemPoolListener func(p *Peer, msg *wire.MsgMemPool)
+
+	// TxListener is invoked when a peer receives a tx bitcoin message.
+	TxListener func(p *Peer, msg *wire.MsgTx)
+
+	// BlockListener is invoked when a peer receives a block bitcoin message.
+	BlockListener func(p *Peer, msg *wire.MsgBlock, buf []byte)
+
+	// InvListener is invoked when a peer receives a inv bitcoin message.
+	InvListener func(p *Peer, msg *wire.MsgInv)
+
+	// HeadersListener is invoked when a peer receives a headers bitcoin message.
+	HeadersListener func(p *Peer, msg *wire.MsgHeaders)
+
+	// NotFoundListener is invoked when a peer receives a notfound bitcoin message.
+	NotFoundListener func(p *Peer, msg *wire.MsgNotFound)
+
+	// GetDataListener is invoked when a peer receives a getdata bitcoin message.
+	GetDataListener func(p *Peer, msg *wire.MsgGetData)
+
+	// GetBlocksListener is invoked when a peer receives a getblocks bitcoin message.
+	GetBlocksListener func(p *Peer, msg *wire.MsgGetBlocks)
+
+	// GetHeadersListener is invoked when a peer receives a getheaders bitcoin message.
+	GetHeadersListener func(p *Peer, msg *wire.MsgGetHeaders)
+
+	// FilterAddListener is invoked when a peer receives a filteradd bitcoin message.
+	FilterAddListener func(p *Peer, msg *wire.MsgFilterAdd)
+
+	// FilterClearListener is invoked when a peer receives a filterclear bitcoin message.
+	FilterClearListener func(p *Peer, msg *wire.MsgFilterClear)
+
+	// FilterLoadListener is invoked when a peer receives a filterload bitcoin message.
+	FilterLoadListener func(p *Peer, msg *wire.MsgFilterLoad)
+
+	// VersionListener is invoked when a peer receives a version bitcoin message.
+	VersionListener func(p *Peer, msg *wire.MsgVersion)
+
+	// VerAckListener is invoked when a peer receives a verack bitcoin message.
+	VerAckListener func(p *Peer, msg *wire.MsgVerAck)
+
+	// RejectListener is invoked when a peer receives a reject bitcoin message.
+	RejectListener func(p *Peer, msg *wire.MsgReject)
+}
+
 // Config is the struct to hold configuration options useful to Peer.
 type Config struct {
+	// Callback functions to be invoked on receiving peer messages.
+	Listeners *MessageListeners
 
 	// Callback which returns the newest block details.
 	NewestBlock ShaFunc
@@ -276,28 +349,6 @@ type Peer struct {
 
 	newestSha ShaFunc
 	nonce     uint64
-
-	listenerMtx             sync.Mutex
-	getAddrMsgListeners     map[string]func(*Peer, *wire.MsgGetAddr)
-	addrMsgListeners        map[string]func(*Peer, *wire.MsgAddr)
-	pingMsgListeners        map[string]func(*Peer, *wire.MsgPing)
-	pongMsgListeners        map[string]func(*Peer, *wire.MsgPong)
-	alertMsgListeners       map[string]func(*Peer, *wire.MsgAlert)
-	memPoolMsgListeners     map[string]func(*Peer, *wire.MsgMemPool)
-	txMsgListeners          map[string]func(*Peer, *wire.MsgTx)
-	blockMsgListeners       map[string]func(*Peer, *wire.MsgBlock, []byte)
-	invMsgListeners         map[string]func(*Peer, *wire.MsgInv)
-	headersMsgListeners     map[string]func(*Peer, *wire.MsgHeaders)
-	notFoundMsgListeners    map[string]func(*Peer, *wire.MsgNotFound)
-	getDataMsgListeners     map[string]func(*Peer, *wire.MsgGetData)
-	getBlocksMsgListeners   map[string]func(*Peer, *wire.MsgGetBlocks)
-	getHeadersMsgListeners  map[string]func(*Peer, *wire.MsgGetHeaders)
-	filterAddMsgListeners   map[string]func(*Peer, *wire.MsgFilterAdd)
-	filterClearMsgListeners map[string]func(*Peer, *wire.MsgFilterClear)
-	filterLoadMsgListeners  map[string]func(*Peer, *wire.MsgFilterLoad)
-	versionMsgListeners     map[string]func(*Peer, *wire.MsgVersion)
-	verackMsgListeners      map[string]func(*Peer, *wire.MsgVerAck)
-	rejectMsgListeners      map[string]func(*Peer, *wire.MsgReject)
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -818,323 +869,6 @@ func (p *Peer) handleVersionMsg(msg *wire.MsgVersion) {
 	p.QueueMessage(wire.NewMsgVerAck(), nil)
 }
 
-// AddVersionMsgListener adds a listener which is invoked when a peer receives
-// a version bitcoin message.
-func (p *Peer) AddVersionMsgListener(key string, listener func(p *Peer, msg *wire.MsgVersion)) {
-	p.listenerMtx.Lock()
-	p.versionMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveVersionMsgListener removes the version message listener with the given
-// key.
-func (p *Peer) RemoveVersionMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.versionMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddVerAckMsgListener adds a listener which is invoked when a peer receives
-// a verack bitcoin message.
-func (p *Peer) AddVerAckMsgListener(key string, listener func(p *Peer, msg *wire.MsgVerAck)) {
-	p.listenerMtx.Lock()
-	p.verackMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveVerAckMsgListener removes the verack message listener with the given
-// key.
-func (p *Peer) RemoveVerAckMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.verackMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddGetAddrMsgListener adds a listener which is invoked when a peer receives
-// a getaddr bitcoin message.
-func (p *Peer) AddGetAddrMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetAddr)) {
-	p.listenerMtx.Lock()
-	p.getAddrMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveGetAddrMsgListener removes the getaddr message listener with the given
-// key.
-func (p *Peer) RemoveGetAddrMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.getAddrMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddAddrMsgListener adds a listener which is invoked when a peer receives
-// a addr bitcoin message.
-func (p *Peer) AddAddrMsgListener(key string, listener func(p *Peer, msg *wire.MsgAddr)) {
-	p.listenerMtx.Lock()
-	p.addrMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveAddrMsgListener removes the addr message listener with the given
-// key.
-func (p *Peer) RemoveAddrMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.addrMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddPingMsgListener adds a listener which is invoked when a peer receives
-// a ping bitcoin message.
-func (p *Peer) AddPingMsgListener(key string, listener func(p *Peer, msg *wire.MsgPing)) {
-	p.listenerMtx.Lock()
-	p.pingMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemovePingMsgListener removes the ping message listener with the given
-// key.
-func (p *Peer) RemovePingMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.pingMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddPongMsgListener adds a listener which is invoked when a peer receives
-// a pong bitcoin message.
-func (p *Peer) AddPongMsgListener(key string, listener func(p *Peer, msg *wire.MsgPong)) {
-	p.listenerMtx.Lock()
-	p.pongMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemovePongMsgListener removes the pong message listener with the given
-// key.
-func (p *Peer) RemovePongMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.pongMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddAlertMsgListener adds a listener which is invoked when a peer receives
-// a alert bitcoin message.
-func (p *Peer) AddAlertMsgListener(key string, listener func(p *Peer, msg *wire.MsgAlert)) {
-	p.listenerMtx.Lock()
-	p.alertMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveAlertMsgListener removes the alert message listener with the given
-// key.
-func (p *Peer) RemoveAlertMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.alertMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddMemPoolMsgListener adds a listener which is invoked when a peer receives
-// a mempool bitcoin message.
-func (p *Peer) AddMemPoolMsgListener(key string, listener func(p *Peer, msg *wire.MsgMemPool)) {
-	p.listenerMtx.Lock()
-	p.memPoolMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveMemPoolMsgListener removes the mempool message listener with the given
-// key.
-func (p *Peer) RemoveMemPoolMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.memPoolMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddTxMsgListener adds a listener which is invoked when a peer receives a tx
-// bitcoin message .
-func (p *Peer) AddTxMsgListener(key string, listener func(p *Peer, msg *wire.MsgTx)) {
-	p.listenerMtx.Lock()
-	p.txMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveTxMsgListener removes the tx message listener with the given key.
-func (p *Peer) RemoveTxMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.txMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddBlockMsgListener adds a listener which is invoked when a peer receives a
-// block bitcoin message .
-func (p *Peer) AddBlockMsgListener(key string, listener func(p *Peer, msg *wire.MsgBlock, buf []byte)) {
-	p.listenerMtx.Lock()
-	p.blockMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveBlockMsgListener removes the block message listener with the given key.
-func (p *Peer) RemoveBlockMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.blockMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddInvMsgListener adds a listener which is invoked when a peer receives a
-// inv bitcoin message .
-func (p *Peer) AddInvMsgListener(key string, listener func(p *Peer, msg *wire.MsgInv)) {
-	p.listenerMtx.Lock()
-	p.invMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveInvMsgListener removes the inv message listener with the given key.
-func (p *Peer) RemoveInvMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.invMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddHeadersMsgListener adds a listener which is invoked when a peer receives
-// a headers bitcoin message .
-func (p *Peer) AddHeadersMsgListener(key string, listener func(p *Peer, msg *wire.MsgHeaders)) {
-	p.listenerMtx.Lock()
-	p.headersMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveHeadersMsgListener removes the headers message listener with the given
-// key.
-func (p *Peer) RemoveHeadersMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.headersMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddNotFoundMsgListener adds a listener which is invoked when a peer receives
-// a not found bitcoin message .
-func (p *Peer) AddNotFoundMsgListener(key string, listener func(p *Peer, msg *wire.MsgNotFound)) {
-	p.listenerMtx.Lock()
-	p.notFoundMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveNotFoundMsgListener removes the not found message listener with the given
-// key.
-func (p *Peer) RemoveNotFoundMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.notFoundMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddGetDataMsgListener adds a listener which is invoked when a peer receives
-// a getdata bitcoin message .
-func (p *Peer) AddGetDataMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetData)) {
-	p.listenerMtx.Lock()
-	p.getDataMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveGetDataMsgListener removes the getdata message listener with the given
-// key.
-func (p *Peer) RemoveGetDataMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.getDataMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddGetBlocksMsgListener adds a listener which is invoked when a peer receives
-// a getblocks bitcoin message .
-func (p *Peer) AddGetBlocksMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetBlocks)) {
-	p.listenerMtx.Lock()
-	p.getBlocksMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveGetBlocksMsgListener removes the getblocks message listener with the given
-// key.
-func (p *Peer) RemoveGetBlocksMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.getBlocksMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddGetHeadersMsgListener adds a listener which is invoked when a peer receives
-// a getheaders bitcoin message .
-func (p *Peer) AddGetHeadersMsgListener(key string, listener func(p *Peer, msg *wire.MsgGetHeaders)) {
-	p.listenerMtx.Lock()
-	p.getHeadersMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveGetHeadersMsgListener removes the getheaders message listener with the given
-// key.
-func (p *Peer) RemoveGetHeadersMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.getHeadersMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddFilterAddMsgListener adds a listener which is invoked when a peer
-// receives a filteradd bitcoin message .
-func (p *Peer) AddFilterAddMsgListener(key string, listener func(p *Peer, msg *wire.MsgFilterAdd)) {
-	p.listenerMtx.Lock()
-	p.filterAddMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveFilterAddMsgListener removes the filteradd message listener with the
-// given key.
-func (p *Peer) RemoveFilterAddMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.filterAddMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddFilterClearMsgListener adds a listener which is invoked when a peer
-// receives a filterclear bitcoin message .
-func (p *Peer) AddFilterClearMsgListener(key string, listener func(p *Peer, msg *wire.MsgFilterClear)) {
-	p.listenerMtx.Lock()
-	p.filterClearMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveFilterClearMsgListener removes the filterclear message listener with the
-// given key.
-func (p *Peer) RemoveFilterClearMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.filterClearMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddFilterLoadMsgListener adds a listener which is invoked when a peer
-// receives a filterload bitcoin message .
-func (p *Peer) AddFilterLoadMsgListener(key string, listener func(p *Peer, msg *wire.MsgFilterLoad)) {
-	p.listenerMtx.Lock()
-	p.filterLoadMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveFilterLoadMsgListener removes the filterload message listener with the
-// given key.
-func (p *Peer) RemoveFilterLoadMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.filterLoadMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
-// AddRejectMsgListener adds a listener which is invoked when a peer receives
-// a reject bitcoin message.
-func (p *Peer) AddRejectMsgListener(key string, listener func(p *Peer, msg *wire.MsgReject)) {
-	p.listenerMtx.Lock()
-	p.rejectMsgListeners[key] = listener
-	p.listenerMtx.Unlock()
-}
-
-// RemoveRejectMsgListener removes the reject message listener with the given
-// key.
-func (p *Peer) RemoveRejectMsgListener(key string) {
-	p.listenerMtx.Lock()
-	delete(p.rejectMsgListeners, key)
-	p.listenerMtx.Unlock()
-}
-
 // PushAddrMsg sends one, or more, addr message(s) to the connected peer using
 // the provided addresses.
 func (p *Peer) PushAddrMsg(addresses []*wire.NetAddress) error {
@@ -1402,13 +1136,9 @@ out:
 		switch msg := rmsg.(type) {
 		case *wire.MsgVersion:
 			p.handleVersionMsg(msg)
-
-			p.listenerMtx.Lock()
-			for key, listener := range p.versionMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.VersionListener != nil {
+				p.cfg.Listeners.VersionListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgVerAck:
 			p.flagsMtx.Lock()
@@ -1430,166 +1160,108 @@ out:
 			p.flagsMtx.Lock()
 			p.verAckReceived = true
 			p.flagsMtx.Unlock()
-
-			p.listenerMtx.Lock()
-			for key, listener := range p.verackMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.VerAckListener != nil {
+				p.cfg.Listeners.VerAckListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgGetAddr:
-			p.listenerMtx.Lock()
-			for key, listener := range p.getAddrMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.GetAddrListener != nil {
+				p.cfg.Listeners.GetAddrListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgAddr:
-			p.listenerMtx.Lock()
-			for key, listener := range p.addrMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.AddrListener != nil {
+				p.cfg.Listeners.AddrListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgPing:
 			p.handlePingMsg(msg)
-			p.listenerMtx.Lock()
-			for key, listener := range p.pingMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.PingListener != nil {
+				p.cfg.Listeners.PingListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgPong:
 			p.handlePongMsg(msg)
-			p.listenerMtx.Lock()
-			for key, listener := range p.pongMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.PongListener != nil {
+				p.cfg.Listeners.PongListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgAlert:
 			// Note: The reference client currently bans peers that send alerts
 			// not signed with its key.  We could verify against their key, but
 			// since the reference client is currently unwilling to support
 			// other implementions' alert messages, we will not relay theirs.
-			p.listenerMtx.Lock()
-			for key, listener := range p.alertMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.AlertListener != nil {
+				p.cfg.Listeners.AlertListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgMemPool:
-			p.listenerMtx.Lock()
-			for key, listener := range p.memPoolMsgListeners {
-				log.Tracef("Running %s listener %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.MemPoolListener != nil {
+				p.cfg.Listeners.MemPoolListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgTx:
-			p.listenerMtx.Lock()
-			for key, listener := range p.txMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.TxListener != nil {
+				p.cfg.Listeners.TxListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgBlock:
 			if p.blockStallCancel != nil {
 				close(p.blockStallCancel)
 			}
-			p.listenerMtx.Lock()
-			for key, listener := range p.blockMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg, buf)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.BlockListener != nil {
+				p.cfg.Listeners.BlockListener(p, msg, buf)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgInv:
-			p.listenerMtx.Lock()
-			for key, listener := range p.invMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.InvListener != nil {
+				p.cfg.Listeners.InvListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgHeaders:
-			p.listenerMtx.Lock()
-			for key, listener := range p.headersMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.HeadersListener != nil {
+				p.cfg.Listeners.HeadersListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgNotFound:
-			p.listenerMtx.Lock()
-			for key, listener := range p.notFoundMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.NotFoundListener != nil {
+				p.cfg.Listeners.NotFoundListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgGetData:
-			p.listenerMtx.Lock()
-			for key, listener := range p.getDataMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.GetDataListener != nil {
+				p.cfg.Listeners.GetDataListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgGetBlocks:
-			p.listenerMtx.Lock()
-			for key, listener := range p.getBlocksMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.GetBlocksListener != nil {
+				p.cfg.Listeners.GetBlocksListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgGetHeaders:
-			p.listenerMtx.Lock()
-			for key, listener := range p.getHeadersMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.GetHeadersListener != nil {
+				p.cfg.Listeners.GetHeadersListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgFilterAdd:
-			p.listenerMtx.Lock()
-			for key, listener := range p.filterAddMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.FilterAddListener != nil {
+				p.cfg.Listeners.FilterAddListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgFilterClear:
-			p.listenerMtx.Lock()
-			for key, listener := range p.filterClearMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.FilterClearListener != nil {
+				p.cfg.Listeners.FilterClearListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgFilterLoad:
-			p.listenerMtx.Lock()
-			for key, listener := range p.filterLoadMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.FilterLoadListener != nil {
+				p.cfg.Listeners.FilterLoadListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		case *wire.MsgReject:
-			p.listenerMtx.Lock()
-			for key, listener := range p.rejectMsgListeners {
-				log.Tracef("Running %s listener for %s", key, p)
-				listener(p, msg)
+			if p.cfg.Listeners != nil && p.cfg.Listeners.RejectListener != nil {
+				p.cfg.Listeners.RejectListener(p, msg)
 			}
-			p.listenerMtx.Unlock()
 
 		default:
 			log.Debugf("Received unhandled message of type %v:",
@@ -2009,27 +1681,6 @@ func newPeerBase(cfg *Config, nonce uint64, inbound bool) *Peer {
 		cfg:                cfg,
 		services:           cfg.Services,
 		protocolVersion:    protocolVersion,
-
-		getAddrMsgListeners:     make(map[string]func(*Peer, *wire.MsgGetAddr)),
-		addrMsgListeners:        make(map[string]func(*Peer, *wire.MsgAddr)),
-		pingMsgListeners:        make(map[string]func(*Peer, *wire.MsgPing)),
-		pongMsgListeners:        make(map[string]func(*Peer, *wire.MsgPong)),
-		alertMsgListeners:       make(map[string]func(*Peer, *wire.MsgAlert)),
-		memPoolMsgListeners:     make(map[string]func(*Peer, *wire.MsgMemPool)),
-		txMsgListeners:          make(map[string]func(*Peer, *wire.MsgTx)),
-		blockMsgListeners:       make(map[string]func(*Peer, *wire.MsgBlock, []byte)),
-		invMsgListeners:         make(map[string]func(*Peer, *wire.MsgInv)),
-		headersMsgListeners:     make(map[string]func(*Peer, *wire.MsgHeaders)),
-		notFoundMsgListeners:    make(map[string]func(*Peer, *wire.MsgNotFound)),
-		getDataMsgListeners:     make(map[string]func(*Peer, *wire.MsgGetData)),
-		getBlocksMsgListeners:   make(map[string]func(*Peer, *wire.MsgGetBlocks)),
-		getHeadersMsgListeners:  make(map[string]func(*Peer, *wire.MsgGetHeaders)),
-		filterAddMsgListeners:   make(map[string]func(*Peer, *wire.MsgFilterAdd)),
-		filterClearMsgListeners: make(map[string]func(*Peer, *wire.MsgFilterClear)),
-		filterLoadMsgListeners:  make(map[string]func(*Peer, *wire.MsgFilterLoad)),
-		versionMsgListeners:     make(map[string]func(*Peer, *wire.MsgVersion)),
-		verackMsgListeners:      make(map[string]func(*Peer, *wire.MsgVerAck)),
-		rejectMsgListeners:      make(map[string]func(*Peer, *wire.MsgReject)),
 	}
 	return &p
 }
