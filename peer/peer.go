@@ -339,11 +339,11 @@ type Peer struct {
 	outputQueue        chan outMsg
 	sendQueue          chan outMsg
 	sendDoneQueue      chan struct{}
-	queueWg            sync.WaitGroup // TODO(oga) wg -> single use channel?
 	outputInvChan      chan *wire.InvVect
 	blockStallActivate chan time.Duration
 	blockStallTimer    <-chan time.Time
 	blockStallCancel   chan struct{}
+	queueQuit          chan struct{}
 	quit               chan struct{}
 
 	stats
@@ -1423,7 +1423,7 @@ cleanup:
 			break cleanup
 		}
 	}
-	p.queueWg.Done()
+	close(p.queueQuit)
 	log.Tracef("Peer queue handler done for %s", p)
 }
 
@@ -1550,10 +1550,10 @@ out:
 
 	pingTimer.Stop()
 
-	p.queueWg.Wait()
+	<-p.queueQuit
 
 	// Drain any wait channels before we go away so we don't leave something
-	// waiting for us. We have waited on queueWg and thus we can be sure
+	// waiting for us. We have waited on queueQuit and thus we can be sure
 	// that we will not miss anything sent on sendQueue.
 cleanup:
 	for {
@@ -1664,9 +1664,6 @@ func (p *Peer) Start() error {
 
 	// Start processing input and output.
 	go p.inHandler()
-	// queueWg is kept so that outHandler knows when the queue has exited so
-	// it can drain correctly.
-	p.queueWg.Add(1)
 	go p.queueHandler()
 	go p.outHandler()
 
@@ -1710,6 +1707,7 @@ func newPeerBase(cfg *Config, inbound bool) *Peer {
 		sendDoneQueue:      make(chan struct{}, 1), // nonblocking sync
 		outputInvChan:      make(chan *wire.InvVect, outputBufferSize),
 		blockStallActivate: make(chan time.Duration),
+		queueQuit:          make(chan struct{}),
 		quit:               make(chan struct{}),
 		stats:              stats{},
 		nonce:              peerNonce,
