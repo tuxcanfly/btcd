@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/go-socks/socks"
@@ -115,7 +116,7 @@ func TestOutboundPeer(t *testing.T) {
 		NewestBlock:      mockNewestSha,
 		UserAgentName:    "peer",
 		UserAgentVersion: "1.0",
-		Net:              wire.MainNet,
+		ChainParams:      &chaincfg.MainNetParams,
 		Services:         0,
 	}
 
@@ -183,7 +184,7 @@ func TestOutboundPeer(t *testing.T) {
 	p1.Shutdown()
 
 	// Test regression
-	peerCfg.RegressionTest = true
+	peerCfg.ChainParams = &chaincfg.RegressionNetParams
 	p2 := peer.NewOutboundPeer(peerCfg, na)
 	if err := p2.Connect(c); err != nil {
 		t.Errorf("Connect: unexpected err %v\n", err)

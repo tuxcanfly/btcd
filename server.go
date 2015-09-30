@@ -1393,10 +1393,9 @@ func (s *server) listenHandler(listener net.Listener) {
 			NewestBlock:      s.db.NewestSha,
 			BestLocalAddress: s.addrManager.GetBestLocalAddress,
 			Proxy:            cfg.Proxy,
-			RegressionTest:   cfg.RegressionTest,
 			UserAgentName:    userAgentName,
 			UserAgentVersion: userAgentVersion,
-			Net:              s.chainParams.Net,
+			ChainParams:      s.chainParams,
 			Services:         wire.SFNodeNetwork,
 		}
 		s.AddPeer(peer.NewInboundPeer(peerCfg, conn))
@@ -1459,10 +1458,9 @@ func (s *server) addPeer(addr string) *peer.Peer {
 		NewestBlock:      s.db.NewestSha,
 		BestLocalAddress: s.addrManager.GetBestLocalAddress,
 		Proxy:            cfg.Proxy,
-		RegressionTest:   cfg.RegressionTest,
 		UserAgentName:    userAgentName,
 		UserAgentVersion: userAgentVersion,
-		Net:              s.chainParams.Net,
+		ChainParams:      s.chainParams,
 		Services:         wire.SFNodeNetwork,
 	}
 	host, portStr, err := net.SplitHostPort(addr)

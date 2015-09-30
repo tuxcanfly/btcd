@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/blockchain"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/go-socks/socks"
 	"github.com/davecgh/go-spew/spew"
@@ -177,17 +178,15 @@ type Config struct {
 	// SOCKS5 proxy (eg. 127.0.0.1:9050) to use for connections.
 	Proxy string
 
-	// Whether to use the regression test network.
-	RegressionTest bool
-
 	// User agent string to be used in peer messages.
 	UserAgentName string
 
 	// User agent version to be used in peer messages.
 	UserAgentVersion string
 
-	// Network flag to be used.
-	Net wire.BitcoinNet
+	// ChainParams identifies which chain parameters the peer is assocaited
+	// with.
+	ChainParams *chaincfg.Params
 
 	// Services flag to be advertised in peer messages.
 	Services wire.ServiceFlag
@@ -328,15 +327,15 @@ type AddrFunc func(remoteAddr *wire.NetAddress) *wire.NetAddress
 // ability for the caller to add and remove handlers, respectively, for each of
 // the protocol messages the caller is interested in.
 type Peer struct {
-	btcnet     wire.BitcoinNet
 	started    int32
 	connected  int32
 	disconnect int32 // only to be used atomically
 	conn       net.Conn
 
-	addr    string
-	cfg     *Config
-	inbound bool
+	addr        string
+	cfg         *Config
+	chainParams *chaincfg.Params
+	inbound     bool
 
 	flagsMtx        sync.Mutex // protects the peer flags below
 	na              *wire.NetAddress
@@ -1023,7 +1022,7 @@ func (p *Peer) handlePongMsg(msg *wire.MsgPong) {
 // readMessage reads the next bitcoin message from the peer with logging.
 func (p *Peer) readMessage() (wire.Message, []byte, error) {
 	n, msg, buf, err := wire.ReadMessageN(p.conn, p.ProtocolVersion(),
-		p.btcnet)
+		p.chainParams.Net)
 	p.statsMtx.Lock()
 	p.bytesReceived += uint64(n)
 	p.statsMtx.Unlock()
@@ -1091,7 +1090,7 @@ func (p *Peer) writeMessage(msg wire.Message) {
 	log.Tracef("%v", newLogClosure(func() string {
 		var buf bytes.Buffer
 		err := wire.WriteMessage(&buf, msg, p.ProtocolVersion(),
-			p.btcnet)
+			p.chainParams.Net)
 		if err != nil {
 			return err.Error()
 		}
@@ -1100,7 +1099,7 @@ func (p *Peer) writeMessage(msg wire.Message) {
 
 	// Write the message to the peer.
 	n, err := wire.WriteMessageN(p.conn, msg, p.ProtocolVersion(),
-		p.btcnet)
+		p.chainParams.Net)
 	p.statsMtx.Lock()
 	p.bytesSent += uint64(n)
 	p.statsMtx.Unlock()
@@ -1138,6 +1137,12 @@ func (p *Peer) isAllowedByRegression(err error) bool {
 
 	// Allowed if all checks passed.
 	return true
+}
+
+// isRegTestNetwork returns whether or not the peer is running on the regression
+// test network.
+func (p *Peer) isRegTestNetwork() bool {
+	return p.chainParams.Net == wire.TestNet
 }
 
 // shouldHandleReadError returns whether or not the passed error, which is
@@ -1185,9 +1190,9 @@ out:
 			// messages, don't disconnect the peer when we're in
 			// regression test mode and the error is one of the
 			// allowed errors.
-			if p.cfg.RegressionTest && p.isAllowedByRegression(err) {
-				log.Errorf("Allowed regression test "+
-					"error from %s: %v", p, err)
+			if p.isRegTestNetwork() && p.isAllowedByRegression(err) {
+				log.Errorf("Allowed regression test error "+
+					"from %s: %v", p, err)
 				idleTimer.Reset(idleTimeout)
 				continue
 			}
@@ -1777,8 +1782,14 @@ func newPeerBase(cfg *Config, inbound bool) *Peer {
 		protocolVersion = MaxProtocolVersion
 	}
 
+	// Set the chain parameters to testnet if the caller did not specify
+	// any.
+	chainParams := &chaincfg.TestNet3Params
+	if cfg.ChainParams == nil {
+		chainParams = cfg.ChainParams
+	}
+
 	p := Peer{
-		btcnet:             cfg.Net,
 		inbound:            inbound,
 		knownInventory:     NewMruInventoryMap(maxKnownInventory),
 		outputQueue:        make(chan outMsg, outputBufferSize),
@@ -1790,6 +1801,7 @@ func newPeerBase(cfg *Config, inbound bool) *Peer {
 		quit:               make(chan struct{}),
 		stats:              stats{},
 		cfg:                cfg,
+		chainParams:        chainParams,
 		services:           cfg.Services,
 		protocolVersion:    protocolVersion,
 	}

@@ -9,6 +9,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/peer"
 	"github.com/btcsuite/btcd/wire"
 )
@@ -21,7 +22,7 @@ func mockRemotePeer() error {
 	peerCfg := &peer.Config{
 		UserAgentName:    "peer", // User agent name to advertise.
 		UserAgentVersion: "1.0",  // User agent version to advertise.
-		Net:              wire.SimNet,
+		ChainParams:      &chaincfg.SimNetParams,
 		Services:         0,
 	}
 
@@ -79,7 +80,7 @@ func Example_newOutboundPeer() {
 
 		UserAgentName:    "peer", // User agent name to advertise.
 		UserAgentVersion: "1.0",  // User agent version to advertise.
-		Net:              wire.SimNet,
+		ChainParams:      &chaincfg.SimNetParams,
 		Services:         0,
 	}
 	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(18555),
