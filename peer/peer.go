@@ -828,11 +828,8 @@ func (p *Peer) handleVersionMsg(msg *wire.MsgVersion) {
 	p.timeOffset = msg.Timestamp.Unix() - time.Now().Unix()
 	p.statsMtx.Unlock()
 
-	// Update peer flags
-	p.flagsMtx.Lock()
-	log.Debugf("Negotiated protocol version %d for peer %s",
-		p.protocolVersion, p)
 	// Negotiate the protocol version.
+	p.flagsMtx.Lock()
 	p.protocolVersion = minUint32(p.protocolVersion, uint32(msg.ProtocolVersion))
 	p.versionKnown = true
 	log.Debugf("Negotiated protocol version %d for peer %s",
