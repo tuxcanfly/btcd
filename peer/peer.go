@@ -66,6 +66,15 @@ var (
 	// zeroHash is the zero value hash (all zeros).  It is defined as a
 	// convenience.
 	zeroHash wire.ShaHash
+
+	// sentNonces houses the unique nonces that are generated when pushing
+	// version messages that are used to detect self connections.
+	sentNonces = newMruNonceMap(50)
+
+	// allowSelfConns is only used to allow the tests to bypass the self
+	// connection detecting and disconnect logic since they intentionally
+	// do so for testing purposes.
+	allowSelfConns bool
 )
 
 // MessageListeners defines callback function pointers to invoke with
@@ -347,8 +356,6 @@ type Peer struct {
 	quit               chan struct{}
 
 	stats
-
-	nonce uint64
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -637,8 +644,19 @@ func (p *Peer) pushVersionMsg() error {
 	if p.cfg.BestLocalAddress != nil {
 		ourNA = p.cfg.BestLocalAddress(p.na)
 	}
+
+	// Generate a unique nonce for this peer so self connections can be
+	// detected.  This is accomplished by adding it to a size-limited map of
+	// recently seen nonces.
+	nonce, err := wire.RandomUint64()
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	sentNonces.Add(nonce)
+
 	// Version message.
-	msg := wire.NewMsgVersion(ourNA, theirNa, p.nonce, int32(blockNum))
+	msg := wire.NewMsgVersion(ourNA, theirNa, nonce, int32(blockNum))
 	msg.AddUserAgent(p.cfg.UserAgentName, p.cfg.UserAgentVersion)
 
 	// XXX: bitcoind appears to always enable the full node services flag
@@ -783,7 +801,7 @@ func (p *Peer) PushRejectMsg(command string, code wire.RejectCode, reason string
 // the communications.
 func (p *Peer) handleVersionMsg(msg *wire.MsgVersion) {
 	// Detect self connections.
-	if msg.Nonce == p.nonce {
+	if !allowSelfConns && sentNonces.Exists(msg.Nonce) {
 		log.Debugf("Disconnecting peer connected to self %s", p)
 		p.Disconnect()
 		return
@@ -1678,10 +1696,6 @@ func (p *Peer) WaitForShutdown() {
 	<-p.quit
 }
 
-// peerNonce is a nonce assigned to all peers created with this package.  It
-// is randomly generated at init time.
-var peerNonce uint64
-
 // newPeerBase returns a new base bitcoin peer based on the inbound flag.  This
 // is used by the NewInboundPeer and NewOutboundPeer functions to perform base
 // setup needed by both types of peers.
@@ -1707,7 +1721,6 @@ func newPeerBase(cfg *Config, inbound bool) *Peer {
 		queueQuit:          make(chan struct{}),
 		quit:               make(chan struct{}),
 		stats:              stats{},
-		nonce:              peerNonce,
 		cfg:                cfg,
 		services:           cfg.Services,
 		protocolVersion:    protocolVersion,
@@ -1732,14 +1745,4 @@ func NewOutboundPeer(cfg *Config, na *wire.NetAddress) *Peer {
 	p.na = na
 	p.addr = fmt.Sprintf("%v:%v", na.IP, na.Port)
 	return p
-}
-
-func init() {
-	// Generate a new random nonce that is assigned to all peers created by
-	// this package.
-	nonce, err := wire.RandomUint64()
-	if err != nil {
-		panic("failed to generate random peer nonce: " + err.Error())
-	}
-	peerNonce = nonce
 }

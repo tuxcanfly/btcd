@@ -11,8 +11,8 @@ The functions are only exported while the tests are being run.
 
 package peer
 
-// TstSetNonce makes the ability to change a peer's nonce available to the test
-// package.
-func (p *Peer) TstSetNonce(nonce uint64) {
-	p.nonce = nonce
+// TstAllowSelfConns allows the test package to allow self connections by
+// disabling the detection logic.
+func TstAllowSelfConns() {
+	allowSelfConns = true
 }

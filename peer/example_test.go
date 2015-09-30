@@ -37,12 +37,8 @@ func mockRemotePeer() error {
 			return
 		}
 
-		// Create and start the inbound peer.  NOTE: Ordinarily the
-		// nonce wouldn't need to be changed here, however since this
-		// test is faking a listener in a separate process, it needs to
-		// change it in order to avoid detecting the self detection.
+		// Create and start the inbound peer.
 		p := peer.NewInboundPeer(peerCfg, conn)
-		p.TstSetNonce(1)
 		if err := p.Start(); err != nil {
 			fmt.Printf("Start: error %v\n", err)
 			return

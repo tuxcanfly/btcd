@@ -220,3 +220,8 @@ func TestOutboundPeer(t *testing.T) {
 
 	p2.Shutdown()
 }
+
+func init() {
+	// Allow self connection when running the tests.
+	peer.TstAllowSelfConns()
+}
