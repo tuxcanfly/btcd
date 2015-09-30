@@ -460,9 +460,9 @@ func (p *Peer) NA() *wire.NetAddress {
 }
 
 // Addr returns the peer address.
-// The address doesn't change after initialization, therefore it is not
-// protected by a mutex.
 func (p *Peer) Addr() string {
+	// The address doesn't change after initialization, therefore it is not
+	// protected by a mutex.
 	return p.addr
 }
 
