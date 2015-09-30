@@ -2289,7 +2289,7 @@ func handleGetPeerInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct{})
 		info := &btcjson.GetPeerInfoResult{
 			ID:             statsSnap.ID,
 			Addr:           statsSnap.Addr,
-			Services:       fmt.Sprintf("%08d", statsSnap.Services),
+			Services:       fmt.Sprintf("%08d", uint64(statsSnap.Services)),
 			LastSend:       statsSnap.LastSend.Unix(),
 			LastRecv:       statsSnap.LastRecv.Unix(),
 			BytesSent:      statsSnap.BytesSent,

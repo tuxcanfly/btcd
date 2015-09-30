@@ -46,7 +46,7 @@ testLoop:
 		// exist.
 		for j := numNonces - 1; j >= numNonces-test.limit; j-- {
 			if !mruNonceMap.Exists(nonces[j]) {
-				t.Errorf("Exists #%d (%s) entry %s does not "+
+				t.Errorf("Exists #%d (%s) entry %d does not "+
 					"exist", i, test.name, nonces[j])
 				continue testLoop
 			}
@@ -56,7 +56,7 @@ testLoop:
 		// entries in the list do not exist.
 		for j := numNonces - test.limit - 1; j >= 0; j-- {
 			if mruNonceMap.Exists(nonces[j]) {
-				t.Errorf("Exists #%d (%s) entry %s exists", i,
+				t.Errorf("Exists #%d (%s) entry %d exists", i,
 					test.name, nonces[j])
 				continue testLoop
 			}
@@ -78,7 +78,7 @@ testLoop:
 			// Ensure the original lru entry still exists since it
 			// was updated and should've have become the mru entry.
 			if !mruNonceMap.Exists(nonces[origLruIndex]) {
-				t.Errorf("MRU #%d (%s) entry %s does not exist",
+				t.Errorf("MRU #%d (%s) entry %d does not exist",
 					i, test.name, nonces[origLruIndex])
 				continue testLoop
 			}
@@ -87,7 +87,7 @@ testLoop:
 			// entry was evicted.
 			newLruIndex := origLruIndex + 1
 			if mruNonceMap.Exists(nonces[newLruIndex]) {
-				t.Errorf("MRU #%d (%s) entry %s exists", i,
+				t.Errorf("MRU #%d (%s) entry %d exists", i,
 					test.name, nonces[newLruIndex])
 				continue testLoop
 			}
@@ -98,7 +98,7 @@ testLoop:
 		for j := 0; j < numNonces; j++ {
 			mruNonceMap.Delete(nonces[j])
 			if mruNonceMap.Exists(nonces[j]) {
-				t.Errorf("Delete #%d (%s) entry %s exists", i,
+				t.Errorf("Delete #%d (%s) entry %d exists", i,
 					test.name, nonces[j])
 				continue testLoop
 			}
