@@ -85,6 +85,17 @@ func pipe(c1, c2 *conn) (*conn, *conn) {
 	return c1, c2
 }
 
+// newestSha returns the latest known block to this peer.
+// In this example, it returns a hard-coded hash and height.
+func newestSha() (*wire.ShaHash, int32, error) {
+	hashStr := "14a0810ac680a3eb3f82edc878cea25ec41d6b790744e5daeef"
+	hash, err := wire.NewShaHashFromStr(hashStr)
+	if err != nil {
+		return nil, 0, err
+	}
+	return hash, 234439, nil
+}
+
 // TestOutboundPeer tests that the outbound peer works as expected.
 func TestOutboundPeer(t *testing.T) {
 	// Use a mock NewestBlock func to test errs

@@ -21,26 +21,14 @@ func lookupFunc(host string) ([]net.IP, error) {
 	return nil, errors.New("not implemented")
 }
 
-// newestSha returns the latest known block to this peer.
-// In this example, it returns a hard-coded hash and height.
-func newestSha() (*wire.ShaHash, int32, error) {
-	hashStr := "14a0810ac680a3eb3f82edc878cea25ec41d6b790744e5daeef"
-	hash, err := wire.NewShaHashFromStr(hashStr)
-	if err != nil {
-		return nil, 0, err
-	}
-	return hash, 234439, nil
-}
-
 // mockRemotePeer creates a basic inbound peer listening on the simnet port for
 // use with Example_peerConnection.  It does not return until the listner is
 // active.
 func mockRemotePeer() error {
 	// Configure peer to act as a simnet node that offers no services.
 	peerCfg := &peer.Config{
-		NewestBlock:      newestSha, // Latest known block to this peer.
-		UserAgentName:    "peer",    // User agent name to advertise.
-		UserAgentVersion: "1.0",     // User agent version to advertise.
+		UserAgentName:    "peer", // User agent name to advertise.
+		UserAgentVersion: "1.0",  // User agent version to advertise.
 		Net:              wire.SimNet,
 		Services:         0,
 	}
@@ -101,9 +89,8 @@ func Example_newOutboundPeer() {
 			},
 		},
 
-		NewestBlock:      newestSha, // Latest known block to this peer.
-		UserAgentName:    "peer",    // User agent name to advertise.
-		UserAgentVersion: "1.0",     // User agent version to advertise.
+		UserAgentName:    "peer", // User agent name to advertise.
+		UserAgentVersion: "1.0",  // User agent version to advertise.
 		Net:              wire.SimNet,
 		Services:         0,
 	}

@@ -144,7 +144,8 @@ type Config struct {
 	// Callback functions to be invoked on receiving peer messages.
 	Listeners *MessageListeners
 
-	// Callback which returns the newest block details.
+	// Callback which returns the newest block details.  This can be nil
+	// in which case the peer will report a block height of 0.
 	NewestBlock ShaFunc
 
 	// BestLocalAddress returns the best local address for a given address.
@@ -347,8 +348,7 @@ type Peer struct {
 
 	stats
 
-	newestSha ShaFunc
-	nonce     uint64
+	nonce uint64
 }
 
 // String returns the peer's address and directionality as a human-readable
@@ -608,9 +608,13 @@ func (p *Peer) StartingHeight() int32 {
 // pushVersionMsg sends a version message to the connected peer using the
 // current state.
 func (p *Peer) pushVersionMsg() error {
-	_, blockNum, err := p.newestSha()
-	if err != nil {
-		return err
+	var blockNum int32
+	if p.cfg.NewestBlock != nil {
+		var err error
+		_, blockNum, err = p.cfg.NewestBlock()
+		if err != nil {
+			return err
+		}
 	}
 
 	theirNa := p.na
@@ -1708,7 +1712,6 @@ func newPeerBase(cfg *Config, inbound bool) *Peer {
 		blockStallActivate: make(chan time.Duration),
 		quit:               make(chan struct{}),
 		stats:              stats{},
-		newestSha:          cfg.NewestBlock,
 		nonce:              peerNonce,
 		cfg:                cfg,
 		services:           cfg.Services,
