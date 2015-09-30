@@ -86,65 +86,65 @@ var (
 // until the callback has completed.  Doing so will result in a deadlock
 // situation.
 type MessageListeners struct {
-	// GetAddrListener is invoked when a peer receives a getaddr bitcoin message.
-	GetAddrListener func(p *Peer, msg *wire.MsgGetAddr)
+	// OnGetAddr is invoked when a peer receives a getaddr bitcoin message.
+	OnGetAddr func(p *Peer, msg *wire.MsgGetAddr)
 
-	// AddrListener is invoked when a peer receives a addr bitcoin message.
-	AddrListener func(p *Peer, msg *wire.MsgAddr)
+	// OnAddr is invoked when a peer receives an addr bitcoin message.
+	OnAddr func(p *Peer, msg *wire.MsgAddr)
 
-	// PingListener is invoked when a peer receives a ping bitcoin message.
-	PingListener func(p *Peer, msg *wire.MsgPing)
+	// OnPing is invoked when a peer receives a ping bitcoin message.
+	OnPing func(p *Peer, msg *wire.MsgPing)
 
-	// PongListener is invoked when a peer receives a pong bitcoin message.
-	PongListener func(p *Peer, msg *wire.MsgPong)
+	// OnPong is invoked when a peer receives a pong bitcoin message.
+	OnPong func(p *Peer, msg *wire.MsgPong)
 
-	// AlertListener is invoked when a peer receives a alert bitcoin message.
-	AlertListener func(p *Peer, msg *wire.MsgAlert)
+	// OnAlert is invoked when a peer receives a alert bitcoin message.
+	OnAlert func(p *Peer, msg *wire.MsgAlert)
 
-	// MemPoolListener is invoked when a peer receives a mempool bitcoin message.
-	MemPoolListener func(p *Peer, msg *wire.MsgMemPool)
+	// OnMemPool is invoked when a peer receives a mempool bitcoin message.
+	OnMemPool func(p *Peer, msg *wire.MsgMemPool)
 
-	// TxListener is invoked when a peer receives a tx bitcoin message.
-	TxListener func(p *Peer, msg *wire.MsgTx)
+	// OnTx is invoked when a peer receives a tx bitcoin message.
+	OnTx func(p *Peer, msg *wire.MsgTx)
 
-	// BlockListener is invoked when a peer receives a block bitcoin message.
-	BlockListener func(p *Peer, msg *wire.MsgBlock, buf []byte)
+	// OnBlock is invoked when a peer receives a block bitcoin message.
+	OnBlock func(p *Peer, msg *wire.MsgBlock, buf []byte)
 
-	// InvListener is invoked when a peer receives a inv bitcoin message.
-	InvListener func(p *Peer, msg *wire.MsgInv)
+	// OnInv is invoked when a peer receives a inv bitcoin message.
+	OnInv func(p *Peer, msg *wire.MsgInv)
 
-	// HeadersListener is invoked when a peer receives a headers bitcoin message.
-	HeadersListener func(p *Peer, msg *wire.MsgHeaders)
+	// OnHeaders is invoked when a peer receives a headers bitcoin message.
+	OnHeaders func(p *Peer, msg *wire.MsgHeaders)
 
-	// NotFoundListener is invoked when a peer receives a notfound bitcoin message.
-	NotFoundListener func(p *Peer, msg *wire.MsgNotFound)
+	// OnNotFound is invoked when a peer receives a notfound bitcoin message.
+	OnNotFound func(p *Peer, msg *wire.MsgNotFound)
 
-	// GetDataListener is invoked when a peer receives a getdata bitcoin message.
-	GetDataListener func(p *Peer, msg *wire.MsgGetData)
+	// OnGetData is invoked when a peer receives a getdata bitcoin message.
+	OnGetData func(p *Peer, msg *wire.MsgGetData)
 
-	// GetBlocksListener is invoked when a peer receives a getblocks bitcoin message.
-	GetBlocksListener func(p *Peer, msg *wire.MsgGetBlocks)
+	// OnGetBlocks is invoked when a peer receives a getblocks bitcoin message.
+	OnGetBlocks func(p *Peer, msg *wire.MsgGetBlocks)
 
-	// GetHeadersListener is invoked when a peer receives a getheaders bitcoin message.
-	GetHeadersListener func(p *Peer, msg *wire.MsgGetHeaders)
+	// OnGetHeaders is invoked when a peer receives a getheaders bitcoin message.
+	OnGetHeaders func(p *Peer, msg *wire.MsgGetHeaders)
 
-	// FilterAddListener is invoked when a peer receives a filteradd bitcoin message.
-	FilterAddListener func(p *Peer, msg *wire.MsgFilterAdd)
+	// OnFilterAdd is invoked when a peer receives a filteradd bitcoin message.
+	OnFilterAdd func(p *Peer, msg *wire.MsgFilterAdd)
 
-	// FilterClearListener is invoked when a peer receives a filterclear bitcoin message.
-	FilterClearListener func(p *Peer, msg *wire.MsgFilterClear)
+	// OnFilterClear is invoked when a peer receives a filterclear bitcoin message.
+	OnFilterClear func(p *Peer, msg *wire.MsgFilterClear)
 
-	// FilterLoadListener is invoked when a peer receives a filterload bitcoin message.
-	FilterLoadListener func(p *Peer, msg *wire.MsgFilterLoad)
+	// OnFilterLoad is invoked when a peer receives a filterload bitcoin message.
+	OnFilterLoad func(p *Peer, msg *wire.MsgFilterLoad)
 
-	// VersionListener is invoked when a peer receives a version bitcoin message.
-	VersionListener func(p *Peer, msg *wire.MsgVersion)
+	// OnVersion is invoked when a peer receives a version bitcoin message.
+	OnVersion func(p *Peer, msg *wire.MsgVersion)
 
-	// VerAckListener is invoked when a peer receives a verack bitcoin message.
-	VerAckListener func(p *Peer, msg *wire.MsgVerAck)
+	// OnVerAck is invoked when a peer receives a verack bitcoin message.
+	OnVerAck func(p *Peer, msg *wire.MsgVerAck)
 
-	// RejectListener is invoked when a peer receives a reject bitcoin message.
-	RejectListener func(p *Peer, msg *wire.MsgReject)
+	// OnReject is invoked when a peer receives a reject bitcoin message.
+	OnReject func(p *Peer, msg *wire.MsgReject)
 }
 
 // Config is the struct to hold configuration options useful to Peer.
@@ -164,12 +164,6 @@ type Config struct {
 
 	// Whether to use the regression test network.
 	RegressionTest bool
-
-	// If non-nil, the callback to be invoked when reading a peer message.
-	OnRead func(int, *wire.Message, error)
-
-	// If non-nil, the callback to be invoked when writing a peer message.
-	OnWrite func(int, *wire.Message, error)
 
 	// User agent string to be used in peer messages.
 	UserAgentName string
@@ -1018,9 +1012,6 @@ func (p *Peer) readMessage() (wire.Message, []byte, error) {
 	p.statsMtx.Lock()
 	p.bytesReceived += uint64(n)
 	p.statsMtx.Unlock()
-	if p.cfg.OnRead != nil {
-		p.cfg.OnRead(n, &msg, err)
-	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1095,9 +1086,6 @@ func (p *Peer) writeMessage(msg wire.Message) {
 	p.statsMtx.Lock()
 	p.bytesSent += uint64(n)
 	p.statsMtx.Unlock()
-	if p.cfg.OnWrite != nil {
-		p.cfg.OnWrite(n, &msg, err)
-	}
 	if err != nil {
 		p.Disconnect()
 		log.Errorf("Can't send message to %s: %v", p, err)
@@ -1225,8 +1213,8 @@ out:
 		switch msg := rmsg.(type) {
 		case *wire.MsgVersion:
 			p.handleVersionMsg(msg)
-			if p.cfg.Listeners.VersionListener != nil {
-				p.cfg.Listeners.VersionListener(p, msg)
+			if p.cfg.Listeners.OnVersion != nil {
+				p.cfg.Listeners.OnVersion(p, msg)
 			}
 
 		case *wire.MsgVerAck:
@@ -1249,30 +1237,30 @@ out:
 			p.flagsMtx.Lock()
 			p.verAckReceived = true
 			p.flagsMtx.Unlock()
-			if p.cfg.Listeners.VerAckListener != nil {
-				p.cfg.Listeners.VerAckListener(p, msg)
+			if p.cfg.Listeners.OnVerAck != nil {
+				p.cfg.Listeners.OnVerAck(p, msg)
 			}
 
 		case *wire.MsgGetAddr:
-			if p.cfg.Listeners.GetAddrListener != nil {
-				p.cfg.Listeners.GetAddrListener(p, msg)
+			if p.cfg.Listeners.OnGetAddr != nil {
+				p.cfg.Listeners.OnGetAddr(p, msg)
 			}
 
 		case *wire.MsgAddr:
-			if p.cfg.Listeners.AddrListener != nil {
-				p.cfg.Listeners.AddrListener(p, msg)
+			if p.cfg.Listeners.OnAddr != nil {
+				p.cfg.Listeners.OnAddr(p, msg)
 			}
 
 		case *wire.MsgPing:
 			p.handlePingMsg(msg)
-			if p.cfg.Listeners.PingListener != nil {
-				p.cfg.Listeners.PingListener(p, msg)
+			if p.cfg.Listeners.OnPing != nil {
+				p.cfg.Listeners.OnPing(p, msg)
 			}
 
 		case *wire.MsgPong:
 			p.handlePongMsg(msg)
-			if p.cfg.Listeners.PongListener != nil {
-				p.cfg.Listeners.PongListener(p, msg)
+			if p.cfg.Listeners.OnPong != nil {
+				p.cfg.Listeners.OnPong(p, msg)
 			}
 
 		case *wire.MsgAlert:
@@ -1280,76 +1268,76 @@ out:
 			// not signed with its key.  We could verify against their key, but
 			// since the reference client is currently unwilling to support
 			// other implementions' alert messages, we will not relay theirs.
-			if p.cfg.Listeners.AlertListener != nil {
-				p.cfg.Listeners.AlertListener(p, msg)
+			if p.cfg.Listeners.OnAlert != nil {
+				p.cfg.Listeners.OnAlert(p, msg)
 			}
 
 		case *wire.MsgMemPool:
-			if p.cfg.Listeners.MemPoolListener != nil {
-				p.cfg.Listeners.MemPoolListener(p, msg)
+			if p.cfg.Listeners.OnMemPool != nil {
+				p.cfg.Listeners.OnMemPool(p, msg)
 			}
 
 		case *wire.MsgTx:
-			if p.cfg.Listeners.TxListener != nil {
-				p.cfg.Listeners.TxListener(p, msg)
+			if p.cfg.Listeners.OnTx != nil {
+				p.cfg.Listeners.OnTx(p, msg)
 			}
 
 		case *wire.MsgBlock:
 			if p.blockStallCancel != nil {
 				close(p.blockStallCancel)
 			}
-			if p.cfg.Listeners.BlockListener != nil {
-				p.cfg.Listeners.BlockListener(p, msg, buf)
+			if p.cfg.Listeners.OnBlock != nil {
+				p.cfg.Listeners.OnBlock(p, msg, buf)
 			}
 
 		case *wire.MsgInv:
-			if p.cfg.Listeners.InvListener != nil {
-				p.cfg.Listeners.InvListener(p, msg)
+			if p.cfg.Listeners.OnInv != nil {
+				p.cfg.Listeners.OnInv(p, msg)
 			}
 
 		case *wire.MsgHeaders:
-			if p.cfg.Listeners.HeadersListener != nil {
-				p.cfg.Listeners.HeadersListener(p, msg)
+			if p.cfg.Listeners.OnHeaders != nil {
+				p.cfg.Listeners.OnHeaders(p, msg)
 			}
 
 		case *wire.MsgNotFound:
-			if p.cfg.Listeners.NotFoundListener != nil {
-				p.cfg.Listeners.NotFoundListener(p, msg)
+			if p.cfg.Listeners.OnNotFound != nil {
+				p.cfg.Listeners.OnNotFound(p, msg)
 			}
 
 		case *wire.MsgGetData:
-			if p.cfg.Listeners.GetDataListener != nil {
-				p.cfg.Listeners.GetDataListener(p, msg)
+			if p.cfg.Listeners.OnGetData != nil {
+				p.cfg.Listeners.OnGetData(p, msg)
 			}
 
 		case *wire.MsgGetBlocks:
-			if p.cfg.Listeners.GetBlocksListener != nil {
-				p.cfg.Listeners.GetBlocksListener(p, msg)
+			if p.cfg.Listeners.OnGetBlocks != nil {
+				p.cfg.Listeners.OnGetBlocks(p, msg)
 			}
 
 		case *wire.MsgGetHeaders:
-			if p.cfg.Listeners.GetHeadersListener != nil {
-				p.cfg.Listeners.GetHeadersListener(p, msg)
+			if p.cfg.Listeners.OnGetHeaders != nil {
+				p.cfg.Listeners.OnGetHeaders(p, msg)
 			}
 
 		case *wire.MsgFilterAdd:
-			if p.cfg.Listeners.FilterAddListener != nil {
-				p.cfg.Listeners.FilterAddListener(p, msg)
+			if p.cfg.Listeners.OnFilterAdd != nil {
+				p.cfg.Listeners.OnFilterAdd(p, msg)
 			}
 
 		case *wire.MsgFilterClear:
-			if p.cfg.Listeners.FilterClearListener != nil {
-				p.cfg.Listeners.FilterClearListener(p, msg)
+			if p.cfg.Listeners.OnFilterClear != nil {
+				p.cfg.Listeners.OnFilterClear(p, msg)
 			}
 
 		case *wire.MsgFilterLoad:
-			if p.cfg.Listeners.FilterLoadListener != nil {
-				p.cfg.Listeners.FilterLoadListener(p, msg)
+			if p.cfg.Listeners.OnFilterLoad != nil {
+				p.cfg.Listeners.OnFilterLoad(p, msg)
 			}
 
 		case *wire.MsgReject:
-			if p.cfg.Listeners.RejectListener != nil {
-				p.cfg.Listeners.RejectListener(p, msg)
+			if p.cfg.Listeners.OnReject != nil {
+				p.cfg.Listeners.OnReject(p, msg)
 			}
 
 		default:
