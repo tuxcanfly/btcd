@@ -332,8 +332,10 @@ type Peer struct {
 	disconnect int32 // only to be used atomically
 	conn       net.Conn
 
+	// These fields are set at creation time and never modified, so they are
+	// safe to read from concurrently without a mutex.
 	addr        string
-	cfg         *Config
+	cfg         Config
 	chainParams *chaincfg.Params
 	inbound     bool
 
@@ -1800,7 +1802,7 @@ func newPeerBase(cfg *Config, inbound bool) *Peer {
 		queueQuit:          make(chan struct{}),
 		quit:               make(chan struct{}),
 		stats:              stats{},
-		cfg:                cfg,
+		cfg:                *cfg,
 		chainParams:        chainParams,
 		services:           cfg.Services,
 		protocolVersion:    protocolVersion,
