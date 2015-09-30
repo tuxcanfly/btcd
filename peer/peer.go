@@ -145,6 +145,21 @@ type MessageListeners struct {
 
 	// OnReject is invoked when a peer receives a reject bitcoin message.
 	OnReject func(p *Peer, msg *wire.MsgReject)
+
+	// OnRead is invoked when a peer receives a bitcoin message.  It
+	// consists of the number of bytes read, the message, and whether or not
+	// an error in the read occurred.  Typically, callers will opt to use
+	// the callbacks for the specific message types, however this can be
+	// useful for circumstances such as keeping track of server-wide byte
+	// counts or working with custom message types for which the peer does
+	// not directly provide a callback.
+	OnRead func(p *Peer, bytesRead int, msg wire.Message, err error)
+
+	// OnWrite is invoked when a peer receives a bitcoin message.  It
+	// consists of the number of bytes written, the message, and whether or
+	// not an error in the write occurred.  This can be useful for
+	// circumstances such as keeping track of server-wide byte counts.
+	OnWrite func(p *Peer, bytesWritten int, msg wire.Message, err error)
 }
 
 // Config is the struct to hold configuration options useful to Peer.
@@ -1012,6 +1027,9 @@ func (p *Peer) readMessage() (wire.Message, []byte, error) {
 	p.statsMtx.Lock()
 	p.bytesReceived += uint64(n)
 	p.statsMtx.Unlock()
+	if p.cfg.Listeners.OnRead != nil {
+		p.cfg.Listeners.OnRead(p, n, msg, err)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1086,6 +1104,9 @@ func (p *Peer) writeMessage(msg wire.Message) {
 	p.statsMtx.Lock()
 	p.bytesSent += uint64(n)
 	p.statsMtx.Unlock()
+	if p.cfg.Listeners.OnWrite != nil {
+		p.cfg.Listeners.OnWrite(p, n, msg, err)
+	}
 	if err != nil {
 		p.Disconnect()
 		log.Errorf("Can't send message to %s: %v", p, err)
