@@ -947,23 +947,37 @@ func (s *server) handleAddrMsg(p *peer.Peer, msg *wire.MsgAddr) {
 	s.addrManager.AddAddresses(msg.AddrList, p.NA())
 }
 
+// handleRead is invoked when a peer receives a message and it is used to update
+// the bytes received by the server.
+func (s *server) handleRead(p *peer.Peer, bytesRead int, msg wire.Message, err error) {
+	s.AddBytesReceived(uint64(bytesRead))
+}
+
+// handleWrite is invoked when a peer sends a message and it is used to update
+// the bytes sent by the server.
+func (s *server) handleWrite(p *peer.Peer, bytesWritten int, msg wire.Message, err error) {
+	s.AddBytesSent(uint64(bytesWritten))
+}
+
 // peerListeners returns peer message listeners.
-func (s *server) peerListeners() *peer.MessageListeners {
-	return &peer.MessageListeners{
-		VersionListener:     s.handleVersionMsg,
-		MemPoolListener:     s.handleMemPoolMsg,
-		TxListener:          s.handleTxMsg,
-		BlockListener:       s.handleBlockMsg,
-		InvListener:         s.handleInvMsg,
-		HeadersListener:     s.handleHeadersMsg,
-		GetDataListener:     s.handleGetDataMsg,
-		GetBlocksListener:   s.handleGetBlocksMsg,
-		GetHeadersListener:  s.handleGetHeadersMsg,
-		FilterAddListener:   s.handleFilterAddMsg,
-		FilterClearListener: s.handleFilterClearMsg,
-		FilterLoadListener:  s.handleFilterLoadMsg,
-		GetAddrListener:     s.handleGetAddrMsg,
-		AddrListener:        s.handleAddrMsg,
+func (s *server) peerListeners() peer.MessageListeners {
+	return peer.MessageListeners{
+		OnVersion:     s.handleVersionMsg,
+		OnMemPool:     s.handleMemPoolMsg,
+		OnTx:          s.handleTxMsg,
+		OnBlock:       s.handleBlockMsg,
+		OnInv:         s.handleInvMsg,
+		OnHeaders:     s.handleHeadersMsg,
+		OnGetData:     s.handleGetDataMsg,
+		OnGetBlocks:   s.handleGetBlocksMsg,
+		OnGetHeaders:  s.handleGetHeadersMsg,
+		OnFilterAdd:   s.handleFilterAddMsg,
+		OnFilterClear: s.handleFilterClearMsg,
+		OnFilterLoad:  s.handleFilterLoadMsg,
+		OnGetAddr:     s.handleGetAddrMsg,
+		OnAddr:        s.handleAddrMsg,
+		OnRead:        s.handleRead,
+		OnWrite:       s.handleWrite,
 	}
 }
 
