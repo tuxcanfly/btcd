@@ -165,36 +165,46 @@ type MessageListeners struct {
 
 // Config is the struct to hold configuration options useful to Peer.
 type Config struct {
-	// Callback functions to be invoked on receiving peer messages.
-	Listeners MessageListeners
-
-	// Callback which returns the newest block details.  This can be nil
-	// in which case the peer will report a block height of 0.
+	// NewestBlock specifies a callback which provides the newest block
+	// details to the peer as needed.  This can be nil in which case the
+	// peer will report a block height of 0.  Typically, only full nodes
+	// will need to specify this.
 	NewestBlock ShaFunc
 
 	// BestLocalAddress returns the best local address for a given address.
 	BestLocalAddress AddrFunc
 
-	// SOCKS5 proxy (eg. 127.0.0.1:9050) to use for connections.
+	// Proxy specifies a SOCKS5 proxy (eg. 127.0.0.1:9050) to use for
+	// connections.
 	Proxy string
 
-	// User agent string to be used in peer messages.
+	// UserAgentName specifies the user agent name to advertise.  It is
+	// highly recommended to specify this value.
 	UserAgentName string
 
-	// User agent version to be used in peer messages.
+	// UserAgentVersion specifies the user agent version to advertise.  It
+	// is highly recommended to specify this value and that it follows the
+	// form "major.minor.revision" e.g. "2.6.41".
 	UserAgentVersion string
 
-	// ChainParams identifies which chain parameters the peer is assocaited
-	// with.
+	// ChainParams identifies which chain parameters the peer is associated
+	// with.  It is highly recommended to specify this field, however it can
+	// be omitted in which case the testnetwork will be used.
 	ChainParams *chaincfg.Params
 
-	// Services flag to be advertised in peer messages.
+	// Services specifies which services to advertise as supported by the
+	// local peer.  This field can be omitted in which case it will be 0
+	// and therefore advertise no supported services.
 	Services wire.ServiceFlag
 
 	// ProtocolVersion specifies the maximum protocol version to use and
 	// advertise.  This field can be omitted in which case
 	// peer.MaxProtocolVersion will be used.
 	ProtocolVersion uint32
+
+	// Listeners houses callback functions to be invoked on receiving peer
+	// messages.
+	Listeners MessageListeners
 }
 
 // minUint32 is a helper function to return the minimum of two uint32s.

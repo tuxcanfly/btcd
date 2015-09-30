@@ -20,10 +20,9 @@ import (
 func mockRemotePeer() error {
 	// Configure peer to act as a simnet node that offers no services.
 	peerCfg := &peer.Config{
-		UserAgentName:    "peer", // User agent name to advertise.
-		UserAgentVersion: "1.0",  // User agent version to advertise.
+		UserAgentName:    "peer",  // User agent name to advertise.
+		UserAgentVersion: "1.0.0", // User agent version to advertise.
 		ChainParams:      &chaincfg.SimNetParams,
-		Services:         0,
 	}
 
 	// Accept connections on the simnet port.
@@ -69,6 +68,10 @@ func Example_newOutboundPeer() {
 	// when the handshake has been finished by signalling a channel.
 	verack := make(chan struct{})
 	peerCfg := &peer.Config{
+		UserAgentName:    "peer",  // User agent name to advertise.
+		UserAgentVersion: "1.0.0", // User agent version to advertise.
+		ChainParams:      &chaincfg.SimNetParams,
+		Services:         0,
 		Listeners: peer.MessageListeners{
 			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) {
 				fmt.Println("outbound: received version")
@@ -77,11 +80,6 @@ func Example_newOutboundPeer() {
 				verack <- struct{}{}
 			},
 		},
-
-		UserAgentName:    "peer", // User agent name to advertise.
-		UserAgentVersion: "1.0",  // User agent version to advertise.
-		ChainParams:      &chaincfg.SimNetParams,
-		Services:         0,
 	}
 	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(18555),
 		peerCfg.Services)
