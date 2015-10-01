@@ -86,24 +86,6 @@ func pipe(c1, c2 *conn) (*conn, *conn) {
 	return c1, c2
 }
 
-// lookupFunc is a callback which resolves IPs from the provided host string.
-// In this example, a standard "ip:port" hostname is used, therefore this func
-// is not implemented.
-func lookupFunc(host string) ([]net.IP, error) {
-	return nil, errors.New("not implemented")
-}
-
-// newestSha returns the latest known block to this peer.
-// In this example, it returns a hard-coded hash and height.
-func newestSha() (*wire.ShaHash, int32, error) {
-	hashStr := "14a0810ac680a3eb3f82edc878cea25ec41d6b790744e5daeef"
-	hash, err := wire.NewShaHashFromStr(hashStr)
-	if err != nil {
-		return nil, 0, err
-	}
-	return hash, 234439, nil
-}
-
 // TestOutboundPeer tests that the outbound peer works as expected.
 func TestOutboundPeer(t *testing.T) {
 	// Use a mock NewestBlock func to test errs
@@ -157,8 +139,16 @@ func TestOutboundPeer(t *testing.T) {
 	<-done
 	p.Shutdown()
 
-	// Reset NewestBlock to normal Start
-	peerCfg.NewestBlock = newestSha
+	// Test NewestBlock
+	var newestBlock = func() (*wire.ShaHash, int32, error) {
+		hashStr := "14a0810ac680a3eb3f82edc878cea25ec41d6b790744e5daeef"
+		hash, err := wire.NewShaHashFromStr(hashStr)
+		if err != nil {
+			return nil, 0, err
+		}
+		return hash, 234439, nil
+	}
+	peerCfg.NewestBlock = newestBlock
 	p1 := peer.NewOutboundPeer(peerCfg, na)
 	if err := p1.Connect(c); err != nil {
 		t.Errorf("Connect: unexpected err %v\n", err)
