@@ -86,6 +86,174 @@ func pipe(c1, c2 *conn) (*conn, *conn) {
 	return c1, c2
 }
 
+// peerStats holds the expected peer stats used for testing peer.
+type peerStats struct {
+	wantID              int32
+	wantAddr            string
+	wantUserAgent       string
+	wantInbound         bool
+	wantServices        wire.ServiceFlag
+	wantProtocolVersion uint32
+	wantConnected       bool
+	wantVersionKnown    bool
+	wantVerAckReceived  bool
+	wantLastBlock       int32
+	wantStartingHeight  int32
+	wantLastPingTime    time.Time
+	wantLastPingNonce   uint64
+	wantLastPingMicros  int64
+	wantTimeOffset      int64
+}
+
+// testPeer tests the given peer's flags and stats
+func testPeer(t *testing.T, p *peer.Peer, s peerStats) {
+	if p.Addr() != s.wantAddr {
+		t.Errorf("testPeer: wrong Addr - got %v, want %v", p.Addr(), s.wantAddr)
+		return
+	}
+
+	if p.UserAgent() != s.wantUserAgent {
+		t.Errorf("testPeer: wrong UserAgent - got %v, want %v", p.UserAgent(), s.wantUserAgent)
+		return
+	}
+
+	if p.Services() != s.wantServices {
+		t.Errorf("testPeer: wrong Services - got %v, want %v", p.Services(), s.wantServices)
+		return
+	}
+
+	if !p.LastPingTime().Equal(s.wantLastPingTime) {
+		t.Errorf("testPeer: wrong LastPingTime - got %v, want %v", p.LastPingTime(), s.wantLastPingTime)
+		return
+	}
+
+	if p.LastPingNonce() != s.wantLastPingNonce {
+		t.Errorf("testPeer: wrong LastPingNonce - got %v, want %v", p.LastPingNonce(), s.wantLastPingNonce)
+		return
+	}
+
+	if p.LastPingMicros() != s.wantLastPingMicros {
+		t.Errorf("testPeer: wrong LastPingMicros - got %v, want %v", p.LastPingMicros(), s.wantLastPingMicros)
+		return
+	}
+
+	if p.VerAckReceived() != s.wantVerAckReceived {
+		t.Errorf("testPeer: wrong VerAckReceived - got %v, want %v", p.VerAckReceived(), s.wantVerAckReceived)
+		return
+	}
+
+	if p.VersionKnown() != s.wantVersionKnown {
+		t.Errorf("testPeer: wrong VersionKnown - got %v, want %v", p.VersionKnown(), s.wantVersionKnown)
+		return
+	}
+
+	if p.ProtocolVersion() != s.wantProtocolVersion {
+		t.Errorf("testPeer: wrong ProtocolVersion - got %v, want %v", p.ProtocolVersion(), s.wantProtocolVersion)
+		return
+	}
+
+	if p.LastBlock() != s.wantLastBlock {
+		t.Errorf("testPeer: wrong LastBlock - got %v, want %v", p.LastBlock(), s.wantLastBlock)
+		return
+	}
+
+	if p.TimeOffset() != s.wantTimeOffset {
+		t.Errorf("testPeer: wrong TimeOffset - got %v, want %v", p.TimeOffset(), s.wantTimeOffset)
+		return
+	}
+
+	if p.StartingHeight() != s.wantStartingHeight {
+		t.Errorf("testPeer: wrong StartingHeight - got %v, want %v", p.StartingHeight(), s.wantStartingHeight)
+		return
+	}
+
+	if p.Connected() != s.wantConnected {
+		t.Errorf("testPeer: wrong Connected - got %v, want %v", p.Connected(), s.wantConnected)
+		return
+	}
+
+	// TODO: actually test the following methods
+	p.LastSend()
+	p.LastRecv()
+	p.TimeConnected()
+	p.BytesSent()
+	p.BytesReceived()
+	p.StatsSnapshot()
+}
+
+// TestPeerConnection tests connection between inbound and outbound peers.
+func TestPeerConnection(t *testing.T) {
+	verack := make(chan struct{}, 1)
+	peerCfg := &peer.Config{
+		Listeners: peer.MessageListeners{
+			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+				verack <- struct{}{}
+			},
+		},
+		UserAgentName:    "peer",
+		UserAgentVersion: "1.0",
+		ChainParams:      &chaincfg.MainNetParams,
+		Services:         0,
+	}
+	inConn, outConn := pipe(
+		&conn{raddr: "10.0.0.1:8333"},
+		&conn{raddr: "10.0.0.2:8333"},
+	)
+	na := wire.NewNetAddressIPPort(net.IP{10, 0, 0, 1}, uint16(8333), 0)
+	wantStats := peerStats{
+		wantAddr:            "10.0.0.1:8333",
+		wantUserAgent:       wire.DefaultUserAgent + "peer:1.0/",
+		wantInbound:         true,
+		wantServices:        0,
+		wantProtocolVersion: peer.MaxProtocolVersion,
+		wantConnected:       true,
+		wantVersionKnown:    true,
+		wantVerAckReceived:  true,
+		wantLastPingTime:    *new(time.Time),
+		wantLastPingNonce:   uint64(0),
+		wantLastPingMicros:  int64(0),
+		wantTimeOffset:      int64(0),
+	}
+	tests := []struct {
+		name  string
+		setup func() (*peer.Peer, *peer.Peer, error)
+	}{{
+		"handshake",
+		func() (*peer.Peer, *peer.Peer, error) {
+			inPeer := peer.NewInboundPeer(peerCfg, inConn)
+			err := inPeer.Start()
+			if err != nil {
+				return nil, nil, err
+			}
+			outPeer := peer.NewOutboundPeer(peerCfg, na)
+			if err := outPeer.Connect(outConn); err != nil {
+				return nil, nil, err
+			}
+			for i := 0; i < 2; i++ {
+				select {
+				case <-verack:
+				case <-time.After(time.Second * 1):
+					return nil, nil, errors.New("verack timeout")
+				}
+			}
+			return inPeer, outPeer, nil
+		},
+	}}
+	t.Logf("Running %d tests", len(tests))
+	for i, test := range tests {
+		inPeer, outPeer, err := test.setup()
+		if err != nil {
+			t.Errorf("TestPeerConnection setup #%d: unexpected err %v\n", i, err)
+			return
+		}
+		testPeer(t, inPeer, wantStats)
+		testPeer(t, outPeer, wantStats)
+
+		inPeer.Shutdown()
+		outPeer.Shutdown()
+	}
+}
+
 // TestOutboundPeer tests that the outbound peer works as expected.
 func TestOutboundPeer(t *testing.T) {
 	// Use a mock NewestBlock func to test errs
@@ -103,9 +271,9 @@ func TestOutboundPeer(t *testing.T) {
 	}
 
 	r, w := io.Pipe()
-	c := &conn{raddr: "127.0.0.1:8333", Writer: w, Reader: r}
+	c := &conn{raddr: "10.0.0.1:8333", Writer: w, Reader: r}
 
-	na := wire.NewNetAddressIPPort(net.IP{127, 0, 0, 1}, uint16(8333), 0)
+	na := wire.NewNetAddressIPPort(net.IP{10, 0, 0, 1}, uint16(8333), 0)
 	p := peer.NewOutboundPeer(peerCfg, na)
 	if p.NA() != na {
 		t.Errorf("TestOutboundPeer: wrong NA - got %v, want %v", p.NA(), na)
