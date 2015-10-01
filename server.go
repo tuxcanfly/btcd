@@ -103,6 +103,7 @@ type updatePeerHeightsMsg struct {
 // bitcoin peers.
 type server struct {
 	listeners            []net.Listener
+	peerConfig           *peer.Config
 	chainParams          *chaincfg.Params
 	started              int32      // atomic
 	shutdown             int32      // atomic
@@ -959,28 +960,6 @@ func (s *server) handleWrite(p *peer.Peer, bytesWritten int, msg wire.Message, e
 	s.AddBytesSent(uint64(bytesWritten))
 }
 
-// peerListeners returns peer message listeners.
-func (s *server) peerListeners() peer.MessageListeners {
-	return peer.MessageListeners{
-		OnVersion:     s.handleVersionMsg,
-		OnMemPool:     s.handleMemPoolMsg,
-		OnTx:          s.handleTxMsg,
-		OnBlock:       s.handleBlockMsg,
-		OnInv:         s.handleInvMsg,
-		OnHeaders:     s.handleHeadersMsg,
-		OnGetData:     s.handleGetDataMsg,
-		OnGetBlocks:   s.handleGetBlocksMsg,
-		OnGetHeaders:  s.handleGetHeadersMsg,
-		OnFilterAdd:   s.handleFilterAddMsg,
-		OnFilterClear: s.handleFilterClearMsg,
-		OnFilterLoad:  s.handleFilterLoadMsg,
-		OnGetAddr:     s.handleGetAddrMsg,
-		OnAddr:        s.handleAddrMsg,
-		OnRead:        s.handleRead,
-		OnWrite:       s.handleWrite,
-	}
-}
-
 func (p *peerState) Count() int {
 	return len(p.peers) + len(p.outboundPeers) + len(p.persistentPeers)
 }
@@ -1388,17 +1367,7 @@ func (s *server) listenHandler(listener net.Listener) {
 			}
 			continue
 		}
-		peerCfg := &peer.Config{
-			Listeners:        s.peerListeners(),
-			NewestBlock:      s.db.NewestSha,
-			BestLocalAddress: s.addrManager.GetBestLocalAddress,
-			Proxy:            cfg.Proxy,
-			UserAgentName:    userAgentName,
-			UserAgentVersion: userAgentVersion,
-			ChainParams:      s.chainParams,
-			Services:         wire.SFNodeNetwork,
-		}
-		s.AddPeer(peer.NewInboundPeer(peerCfg, conn))
+		s.AddPeer(peer.NewInboundPeer(s.peerConfig, conn))
 	}
 	s.wg.Done()
 	srvrLog.Tracef("Listener handler done for %s", listener.Addr())
@@ -1453,16 +1422,6 @@ func (s *server) seedFromDNS() {
 
 // addPeer initializes a new outbound peer and setups the message listeners.
 func (s *server) addPeer(addr string) *peer.Peer {
-	peerCfg := &peer.Config{
-		Listeners:        s.peerListeners(),
-		NewestBlock:      s.db.NewestSha,
-		BestLocalAddress: s.addrManager.GetBestLocalAddress,
-		Proxy:            cfg.Proxy,
-		UserAgentName:    userAgentName,
-		UserAgentVersion: userAgentVersion,
-		ChainParams:      s.chainParams,
-		Services:         wire.SFNodeNetwork,
-	}
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {
 		srvrLog.Errorf("Tried to create a new outbound peer with invalid "+
@@ -1477,14 +1436,14 @@ func (s *server) addPeer(addr string) *peer.Peer {
 		return nil
 	}
 
-	na, err := s.addrManager.HostToNetAddress(host, uint16(port), peerCfg.Services)
+	na, err := s.addrManager.HostToNetAddress(host, uint16(port), s.services)
 	if err != nil {
 		srvrLog.Errorf("Can not turn host %s into netaddress: %v",
 			host, err)
 		return nil
 	}
 
-	return peer.NewOutboundPeer(peerCfg, na)
+	return peer.NewOutboundPeer(s.peerConfig, na)
 }
 
 // establishConn establishes a connection to the peer.
@@ -2289,6 +2248,34 @@ func newServer(listenAddrs []string, db database.Db, chainParams *chaincfg.Param
 	s.blockManager = bm
 	s.txMemPool = newTxMemPool(&s)
 	s.cpuMiner = newCPUMiner(&s)
+
+	s.peerConfig = &peer.Config{
+		NewestBlock:      db.NewestSha,
+		BestLocalAddress: amgr.GetBestLocalAddress,
+		Proxy:            cfg.Proxy,
+		UserAgentName:    userAgentName,
+		UserAgentVersion: userAgentVersion,
+		ChainParams:      chainParams,
+		Services:         services,
+		Listeners: peer.MessageListeners{
+			OnVersion:     s.handleVersionMsg,
+			OnMemPool:     s.handleMemPoolMsg,
+			OnTx:          s.handleTxMsg,
+			OnBlock:       s.handleBlockMsg,
+			OnInv:         s.handleInvMsg,
+			OnHeaders:     s.handleHeadersMsg,
+			OnGetData:     s.handleGetDataMsg,
+			OnGetBlocks:   s.handleGetBlocksMsg,
+			OnGetHeaders:  s.handleGetHeadersMsg,
+			OnFilterAdd:   s.handleFilterAddMsg,
+			OnFilterClear: s.handleFilterClearMsg,
+			OnFilterLoad:  s.handleFilterLoadMsg,
+			OnGetAddr:     s.handleGetAddrMsg,
+			OnAddr:        s.handleAddrMsg,
+			OnRead:        s.handleRead,
+			OnWrite:       s.handleWrite,
+		},
+	}
 
 	if cfg.AddrIndex {
 		ai, err := newAddrIndexer(&s)
