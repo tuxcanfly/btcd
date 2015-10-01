@@ -1081,6 +1081,16 @@ func (s *server) handleAddPeerMsg(state *peerState, p *peer.Peer, persistent boo
 		}
 	}
 
+	// Handle peer shutdown or disconnect
+	go func() {
+		p.WaitForShutdown()
+		s.donePeers <- p
+
+		// Only tell block manager we are gone if we ever told it we existed.
+		if p.VersionKnown() {
+			s.blockManager.DonePeer(p)
+		}
+	}()
 	return true
 }
 
