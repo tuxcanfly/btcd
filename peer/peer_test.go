@@ -195,10 +195,6 @@ func TestPeerConnection(t *testing.T) {
 		ChainParams:      &chaincfg.MainNetParams,
 		Services:         0,
 	}
-	inConn, outConn := pipe(
-		&conn{raddr: "10.0.0.1:8333"},
-		&conn{raddr: "10.0.0.2:8333"},
-	)
 	na := wire.NewNetAddressIPPort(net.IP{10, 0, 0, 1}, uint16(8333), 0)
 	wantStats := peerStats{
 		wantAddr:            "10.0.0.1:8333",
@@ -217,28 +213,60 @@ func TestPeerConnection(t *testing.T) {
 	tests := []struct {
 		name  string
 		setup func() (*peer.Peer, *peer.Peer, error)
-	}{{
-		"handshake",
-		func() (*peer.Peer, *peer.Peer, error) {
-			inPeer := peer.NewInboundPeer(peerCfg, inConn)
-			err := inPeer.Start()
-			if err != nil {
-				return nil, nil, err
-			}
-			outPeer := peer.NewOutboundPeer(peerCfg, na)
-			if err := outPeer.Connect(outConn); err != nil {
-				return nil, nil, err
-			}
-			for i := 0; i < 2; i++ {
-				select {
-				case <-verack:
-				case <-time.After(time.Second * 1):
-					return nil, nil, errors.New("verack timeout")
+	}{
+		{
+			"basic handshake",
+			func() (*peer.Peer, *peer.Peer, error) {
+				inConn, outConn := pipe(
+					&conn{raddr: "10.0.0.1:8333"},
+					&conn{raddr: "10.0.0.2:8333"},
+				)
+				inPeer := peer.NewInboundPeer(peerCfg, inConn)
+				err := inPeer.Start()
+				if err != nil {
+					return nil, nil, err
 				}
-			}
-			return inPeer, outPeer, nil
+				outPeer := peer.NewOutboundPeer(peerCfg, na)
+				if err := outPeer.Connect(outConn); err != nil {
+					return nil, nil, err
+				}
+				for i := 0; i < 2; i++ {
+					select {
+					case <-verack:
+					case <-time.After(time.Second * 1):
+						return nil, nil, errors.New("verack timeout")
+					}
+				}
+				return inPeer, outPeer, nil
+			},
 		},
-	}}
+		{
+			"socks proxy",
+			func() (*peer.Peer, *peer.Peer, error) {
+				inConn, outConn := pipe(
+					&conn{raddr: "10.0.0.1:8333", proxy: true},
+					&conn{raddr: "10.0.0.2:8333"},
+				)
+				inPeer := peer.NewInboundPeer(peerCfg, inConn)
+				err := inPeer.Start()
+				if err != nil {
+					return nil, nil, err
+				}
+				outPeer := peer.NewOutboundPeer(peerCfg, na)
+				if err := outPeer.Connect(outConn); err != nil {
+					return nil, nil, err
+				}
+				for i := 0; i < 2; i++ {
+					select {
+					case <-verack:
+					case <-time.After(time.Second * 1):
+						return nil, nil, errors.New("verack timeout")
+					}
+				}
+				return inPeer, outPeer, nil
+			},
+		},
+	}
 	t.Logf("Running %d tests", len(tests))
 	for i, test := range tests {
 		inPeer, outPeer, err := test.setup()
@@ -252,6 +280,202 @@ func TestPeerConnection(t *testing.T) {
 		inPeer.Shutdown()
 		outPeer.Shutdown()
 	}
+}
+
+// TestPeerListeners tests that the peer listeners are called as expected.
+func TestPeerListeners(t *testing.T) {
+	verack := make(chan struct{}, 1)
+	ok := make(chan wire.Message, 20)
+	peerCfg := &peer.Config{
+		Listeners: peer.MessageListeners{
+			OnGetAddr: func(p *peer.Peer, msg *wire.MsgGetAddr) {
+				ok <- msg
+			},
+			OnAddr: func(p *peer.Peer, msg *wire.MsgAddr) {
+				ok <- msg
+			},
+			OnPing: func(p *peer.Peer, msg *wire.MsgPing) {
+				ok <- msg
+			},
+			OnPong: func(p *peer.Peer, msg *wire.MsgPong) {
+				ok <- msg
+			},
+			OnAlert: func(p *peer.Peer, msg *wire.MsgAlert) {
+				ok <- msg
+			},
+			OnMemPool: func(p *peer.Peer, msg *wire.MsgMemPool) {
+				ok <- msg
+			},
+			OnTx: func(p *peer.Peer, msg *wire.MsgTx) {
+				ok <- msg
+			},
+			OnBlock: func(p *peer.Peer, msg *wire.MsgBlock, buf []byte) {
+				ok <- msg
+			},
+			OnInv: func(p *peer.Peer, msg *wire.MsgInv) {
+				ok <- msg
+			},
+			OnHeaders: func(p *peer.Peer, msg *wire.MsgHeaders) {
+				ok <- msg
+			},
+			OnNotFound: func(p *peer.Peer, msg *wire.MsgNotFound) {
+				ok <- msg
+			},
+			OnGetData: func(p *peer.Peer, msg *wire.MsgGetData) {
+				ok <- msg
+			},
+			OnGetBlocks: func(p *peer.Peer, msg *wire.MsgGetBlocks) {
+				ok <- msg
+			},
+			OnGetHeaders: func(p *peer.Peer, msg *wire.MsgGetHeaders) {
+				ok <- msg
+			},
+			OnFilterAdd: func(p *peer.Peer, msg *wire.MsgFilterAdd) {
+				ok <- msg
+			},
+			OnFilterClear: func(p *peer.Peer, msg *wire.MsgFilterClear) {
+				ok <- msg
+			},
+			OnFilterLoad: func(p *peer.Peer, msg *wire.MsgFilterLoad) {
+				ok <- msg
+			},
+			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) {
+				ok <- msg
+			},
+			OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+				verack <- struct{}{}
+			},
+			OnReject: func(p *peer.Peer, msg *wire.MsgReject) {
+				ok <- msg
+			},
+		},
+		UserAgentName:    "peer",
+		UserAgentVersion: "1.0",
+		ChainParams:      &chaincfg.MainNetParams,
+		Services:         0,
+	}
+	inConn, outConn := pipe(
+		&conn{raddr: "10.0.0.1:8333"},
+		&conn{raddr: "10.0.0.2:8333"},
+	)
+	na := wire.NewNetAddressIPPort(net.IP{10, 0, 0, 1}, uint16(8333), 0)
+	inPeer := peer.NewInboundPeer(peerCfg, inConn)
+	err := inPeer.Start()
+	if err != nil {
+		t.Errorf("TestPeerListeners: unexpected err %v\n", err)
+		return
+	}
+	peerCfg.Listeners = peer.MessageListeners{
+		OnVerAck: func(p *peer.Peer, msg *wire.MsgVerAck) {
+			verack <- struct{}{}
+		},
+	}
+	outPeer := peer.NewOutboundPeer(peerCfg, na)
+	if err := outPeer.Connect(outConn); err != nil {
+		t.Errorf("TestPeerListeners: unexpected err %v\n", err)
+		return
+	}
+	for i := 0; i < 2; i++ {
+		select {
+		case <-verack:
+		case <-time.After(time.Second * 1):
+			t.Errorf("TestPeerListeners: verack timeout\n")
+			return
+		}
+	}
+
+	tests := []struct {
+		listener string
+		msg      wire.Message
+	}{
+		{
+			"OnGetAddr",
+			wire.NewMsgGetAddr(),
+		},
+		{
+			"OnAddr",
+			wire.NewMsgAddr(),
+		},
+		{
+			"OnPing",
+			wire.NewMsgPing(42),
+		},
+		{
+			"OnPong",
+			wire.NewMsgPong(42),
+		},
+		{
+			"OnAlert",
+			wire.NewMsgAlert([]byte("payload"), []byte("signature")),
+		},
+		{
+			"OnMemPool",
+			wire.NewMsgMemPool(),
+		},
+		{
+			"OnTx",
+			wire.NewMsgTx(),
+		},
+		{
+			"OnBlock",
+			wire.NewMsgBlock(wire.NewBlockHeader(&wire.ShaHash{}, &wire.ShaHash{}, 1, 1)),
+		},
+		{
+			"OnInv",
+			wire.NewMsgInv(),
+		},
+		{
+			"OnHeaders",
+			wire.NewMsgHeaders(),
+		},
+		{
+			"OnNotFound",
+			wire.NewMsgNotFound(),
+		},
+		{
+			"OnGetData",
+			wire.NewMsgGetData(),
+		},
+		{
+			"OnGetBlocks",
+			wire.NewMsgGetBlocks(&wire.ShaHash{}),
+		},
+		{
+			"OnGetHeaders",
+			wire.NewMsgGetHeaders(),
+		},
+		{
+			"OnFilterAddMsg",
+			wire.NewMsgFilterAdd([]byte{0x01}),
+		},
+		{
+			"OnFilterClearMsg",
+			wire.NewMsgFilterClear(),
+		},
+		{
+			"OnFilterLoadMsg",
+			wire.NewMsgFilterLoad([]byte{0x01}, 10, 0, wire.BloomUpdateNone),
+		},
+		// only one version message is allowed
+		// only one verack message is allowed
+		{
+			"OnMsgReject",
+			wire.NewMsgReject("block", wire.RejectDuplicate, "dupe block"),
+		},
+	}
+	t.Logf("Running %d tests", len(tests))
+	for _, test := range tests {
+		// Queue the test message
+		outPeer.QueueMessage(test.msg, nil)
+		select {
+		case <-ok:
+		case <-time.After(time.Second * 1):
+			t.Errorf("TestPeerListeners: %s timeout", test.listener)
+			return
+		}
+	}
+	inPeer.Shutdown()
+	outPeer.Shutdown()
 }
 
 // TestOutboundPeer tests that the outbound peer works as expected.
