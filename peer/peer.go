@@ -47,8 +47,8 @@ const (
 	// reply before we will ping a host.
 	pingTimeout = 2 * time.Minute
 
-	// negotiateTimeout is the duration of inactivity before we timeout a peer
-	// that hasn't completed the initial version negotiation.
+	// negotiateTimeout is the duration of inactivity before we timeout a
+	// peer that hasn't completed the initial version negotiation.
 	negotiateTimeout = 30 * time.Second
 
 	// idleTimeout is the duration of inactivity before we time out a peer.
@@ -99,7 +99,7 @@ type MessageListeners struct {
 	// OnPong is invoked when a peer receives a pong bitcoin message.
 	OnPong func(p *Peer, msg *wire.MsgPong)
 
-	// OnAlert is invoked when a peer receives a alert bitcoin message.
+	// OnAlert is invoked when a peer receives an alert bitcoin message.
 	OnAlert func(p *Peer, msg *wire.MsgAlert)
 
 	// OnMemPool is invoked when a peer receives a mempool bitcoin message.
@@ -111,31 +111,37 @@ type MessageListeners struct {
 	// OnBlock is invoked when a peer receives a block bitcoin message.
 	OnBlock func(p *Peer, msg *wire.MsgBlock, buf []byte)
 
-	// OnInv is invoked when a peer receives a inv bitcoin message.
+	// OnInv is invoked when a peer receives an inv bitcoin message.
 	OnInv func(p *Peer, msg *wire.MsgInv)
 
 	// OnHeaders is invoked when a peer receives a headers bitcoin message.
 	OnHeaders func(p *Peer, msg *wire.MsgHeaders)
 
-	// OnNotFound is invoked when a peer receives a notfound bitcoin message.
+	// OnNotFound is invoked when a peer receives a notfound bitcoin
+	// message.
 	OnNotFound func(p *Peer, msg *wire.MsgNotFound)
 
 	// OnGetData is invoked when a peer receives a getdata bitcoin message.
 	OnGetData func(p *Peer, msg *wire.MsgGetData)
 
-	// OnGetBlocks is invoked when a peer receives a getblocks bitcoin message.
+	// OnGetBlocks is invoked when a peer receives a getblocks bitcoin
+	// message.
 	OnGetBlocks func(p *Peer, msg *wire.MsgGetBlocks)
 
-	// OnGetHeaders is invoked when a peer receives a getheaders bitcoin message.
+	// OnGetHeaders is invoked when a peer receives a getheaders bitcoin
+	// message.
 	OnGetHeaders func(p *Peer, msg *wire.MsgGetHeaders)
 
-	// OnFilterAdd is invoked when a peer receives a filteradd bitcoin message.
+	// OnFilterAdd is invoked when a peer receives a filteradd bitcoin
+	// message.
 	OnFilterAdd func(p *Peer, msg *wire.MsgFilterAdd)
 
-	// OnFilterClear is invoked when a peer receives a filterclear bitcoin message.
+	// OnFilterClear is invoked when a peer receives a filterclear bitcoin
+	// message.
 	OnFilterClear func(p *Peer, msg *wire.MsgFilterClear)
 
-	// OnFilterLoad is invoked when a peer receives a filterload bitcoin message.
+	// OnFilterLoad is invoked when a peer receives a filterload bitcoin
+	// message.
 	OnFilterLoad func(p *Peer, msg *wire.MsgFilterLoad)
 
 	// OnMerkleBlock  is invoked when a peer receives a merkleblock bitcoin
@@ -193,7 +199,7 @@ type Config struct {
 
 	// ChainParams identifies which chain parameters the peer is associated
 	// with.  It is highly recommended to specify this field, however it can
-	// be omitted in which case the testnetwork will be used.
+	// be omitted in which case the test network will be used.
 	ChainParams *chaincfg.Params
 
 	// Services specifies which services to advertise as supported by the
@@ -967,8 +973,12 @@ func (p *Peer) handleVersionMsg(msg *wire.MsgVersion) {
 	p.QueueMessage(wire.NewMsgVerAck(), nil)
 }
 
-// PushAddrMsg sends one, or more, addr message(s) to the connected peer using
-// the provided addresses.
+// PushAddrMsg sends an addr message to the connected peer using the provided
+// addresses.  This function is useful over manually sending the message via
+// QueueMessage since it automatically limits the addresses to the maximum
+// number allowed by the message and randomizes the chosen addresses when there
+// are too many.  No message will be sent if there are no entries in the
+// provided addresses slice.
 //
 // This function is safe for concurrent access.
 func (p *Peer) PushAddrMsg(addresses []*wire.NetAddress) error {
@@ -981,8 +991,8 @@ func (p *Peer) PushAddrMsg(addresses []*wire.NetAddress) error {
 	numAdded := 0
 	msg := wire.NewMsgAddr()
 	for _, na := range addresses {
-		// If the maxAddrs limit has been reached, randomize the list
-		// with the remaining addresses.
+		// Randomize the list with the remaining addresses when the
+		// max addresses limit has been reached.
 		if numAdded == wire.MaxAddrPerMsg {
 			msg.AddrList[r.Intn(wire.MaxAddrPerMsg)] = na
 			continue
@@ -1013,10 +1023,10 @@ func (p *Peer) handlePingMsg(msg *wire.MsgPing) {
 	}
 }
 
-// handlePongMsg is invoked when a peer receives a pong bitcoin message.  For
-// recent clients (protocol version > BIP0031Version), and if we had send a ping
-// previosuly we update our ping time statistics. If the client is too old or
-// we had not send a ping we ignore it.
+// handlePongMsg is invoked when a peer receives a pong bitcoin message.  It
+// updates the ping statistics as required for recent clients (protocol
+// version > BIP0031Version).  There is no effect for older clients or when a
+// ping was not previously sent.
 func (p *Peer) handlePongMsg(msg *wire.MsgPong) {
 	p.statsMtx.Lock()
 	defer p.statsMtx.Unlock()
@@ -1193,15 +1203,20 @@ func (p *Peer) inHandler() {
 	// to idleTimeout for all future messages.
 	idleTimer := time.AfterFunc(negotiateTimeout, func() {
 		if p.VersionKnown() {
-			log.Warnf("Peer %s no answer for %d minutes, "+
+			log.Warnf("Peer %s no answer for %s -- disconnecting",
+				p, idleTimeout)
+		} else {
+			log.Warnf("Peer %s no valid version message for %s -- "+
 				"disconnecting", p, negotiateTimeout)
 		}
 		p.Disconnect()
 	})
 out:
 	for atomic.LoadInt32(&p.disconnect) == 0 {
+		// Read a message and stop the idle timer as soon as the read
+		// is done.  The timer is reset below for the next iteration if
+		// needed.
 		rmsg, buf, err := p.readMessage()
-		// Stop the timer now, if we go around again we will reset it.
 		idleTimer.Stop()
 		if err != nil {
 			// In order to allow regression tests with malformed
@@ -1265,14 +1280,15 @@ out:
 			p.flagsMtx.Lock()
 			versionSent := p.versionSent
 			p.flagsMtx.Unlock()
-
 			if !versionSent {
 				log.Infof("Received 'verack' from peer %v "+
-					"before version was sent -- disconnecting", p)
+					"before version was sent -- "+
+					"disconnecting", p)
 				break out
 			}
-			// No read lock is necessary because verAckReceived is not written
-			// to in any other goroutine
+
+			// No read lock is necessary because verAckReceived is
+			// not written to in any other goroutine.
 			if p.verAckReceived {
 				log.Infof("Already received 'verack' from "+
 					"peer %v -- disconnecting", p)
@@ -1394,11 +1410,11 @@ out:
 				rmsg.Command())
 		}
 
-		// ok we got a message, reset the timer.
-		// timer just calls p.Disconnect() after logging.
+		// A message was received so reset the idle timer.
 		idleTimer.Reset(idleTimeout)
 	}
 
+	// Ensure the idle timer is stopped to avoid leaking the resource.
 	idleTimer.Stop()
 
 	// Ensure connection is closed.
@@ -1564,36 +1580,39 @@ out:
 	for {
 		select {
 		case msg := <-p.sendQueue:
-			// If the message is one we should get a reply for
-			// then reset the timer, we only want to send pings
-			// when otherwise we would not receive a reply from
-			// the peer. We specifically do not count block or inv
-			// messages here since they are not sure of a reply if
-			// the inv is of no interest explicitly solicited invs
-			// should elicit a reply but we don't track them
-			// specially.
+			// Reset the ping timer for messages that expect a
+			// reply since we only want to send pings when we would
+			// otherwise not receive a reply from the peer.  The
+			// getblocks and inv messages are specifically not
+			// counted here since there is no guarantee they will
+			// result in a reply.
 			reset := true
 			switch m := msg.msg.(type) {
 			case *wire.MsgVersion:
-				// should get a verack
+				// Expects a verack message.  Also set the flag
+				// which indicates the version has been sent.
 				p.flagsMtx.Lock()
 				p.versionSent = true
 				p.flagsMtx.Unlock()
+
 			case *wire.MsgGetAddr:
-				// should get addresses
+				// Expects an addr message.
+
 			case *wire.MsgPing:
-				// expects pong
-				// Also set up statistics.
-				p.statsMtx.Lock()
+				// Expects a pong message in later protocol
+				// versions.  Also set up statistics.
 				if p.ProtocolVersion() > wire.BIP0031Version {
+					p.statsMtx.Lock()
 					p.lastPingNonce = m.Nonce
 					p.lastPingTime = time.Now()
+					p.statsMtx.Unlock()
 				}
-				p.statsMtx.Unlock()
+
 			case *wire.MsgMemPool:
-				// Should return an inv.
+				// Expects an inv message.
+
 			case *wire.MsgGetData:
-				// Should get us block, tx, or not found.
+				// Expects a block, tx, or notfound message.
 
 				// If the blockStallTimer has not already been
 				// started, then initialize the timer to fire
@@ -1608,14 +1627,17 @@ out:
 					p.blockStallTimer = time.After(stallTimeout)
 					p.blockStallCancel = make(chan struct{})
 				}
+
 			case *wire.MsgGetHeaders:
-				// Should get us headers back.
+				// Expects a headers message.
+
 			default:
 				// Not one of the above, no sure reply.
 				// We want to ping if nothing else
 				// interesting happens.
 				reset = false
 			}
+
 			if reset {
 				pingTimer.Reset(pingTimeout)
 			}
@@ -1633,6 +1655,7 @@ out:
 				"seconds) for: %v", timeout, p)
 			blockStallActive = true
 			stallTimeout = timeout
+
 		case <-p.blockStallCancel:
 			// The inHandler received a MsgBlock before
 			// BlockStallTimeout seconds had elapsed. So we set the
@@ -1642,6 +1665,7 @@ out:
 			p.blockStallTimer = nil
 			p.blockStallCancel = nil
 			blockStallActive = false
+
 		case <-p.blockStallTimer:
 			// The inHandler didn't receive a MsgBlock before
 			// BlockStallTimeout seconds had elapsed. So we
@@ -1650,6 +1674,7 @@ out:
 				"block download, no block response for %v "+
 				"seconds disconnecting", p, BlockStallTimeout)
 			p.Disconnect()
+
 		case <-p.quit:
 			break out
 		}
@@ -1682,11 +1707,10 @@ cleanup:
 //
 // This function is safe for concurrent access.
 func (p *Peer) QueueMessage(msg wire.Message, doneChan chan struct{}) {
-	// Avoid risk of deadlock if goroutine already exited. The goroutine
+	// Avoid risk of deadlock if goroutine already exited.  The goroutine
 	// we will be sending to hangs around until it knows for a fact that
-	// it is marked as disconnected. *then* it drains the channels.
+	// it is marked as disconnected and *then* it drains the channels.
 	if !p.Connected() {
-		// avoid deadlock...
 		if doneChan != nil {
 			go func() {
 				doneChan <- struct{}{}
@@ -1703,15 +1727,15 @@ func (p *Peer) QueueMessage(msg wire.Message, doneChan chan struct{}) {
 //
 // This function is safe for concurrent access.
 func (p *Peer) QueueInventory(invVect *wire.InvVect) {
-	// Don't add the inventory to the send queue if the peer is
-	// already known to have it.
+	// Don't add the inventory to the send queue if the peer is already
+	// known to have it.
 	if p.isKnownInventory(invVect) {
 		return
 	}
 
-	// Avoid risk of deadlock if goroutine already exited. The goroutine
+	// Avoid risk of deadlock if goroutine already exited.  The goroutine
 	// we will be sending to hangs around until it knows for a fact that
-	// it is marked as disconnected. *then* it drains the channels.
+	// it is marked as disconnected and *then* it drains the channels.
 	if !p.Connected() {
 		return
 	}
@@ -1787,7 +1811,9 @@ func (p *Peer) Shutdown() {
 	p.Disconnect()
 }
 
-// WaitForShutdown waits until the peer is shutdown.
+// WaitForShutdown waits until the peer has completely shutdown.  This will
+// happen if either the local or remote side has been disconnected or the peer
+// is forcibly shutdown via Shutdown.
 func (p *Peer) WaitForShutdown() {
 	<-p.quit
 }
@@ -1821,7 +1847,7 @@ func newPeerBase(cfg *Config, inbound bool) *Peer {
 		queueQuit:          make(chan struct{}),
 		quit:               make(chan struct{}),
 		stats:              stats{},
-		cfg:                *cfg,
+		cfg:                *cfg, // Copy so caller can't mutate.
 		chainParams:        chainParams,
 		services:           cfg.Services,
 		protocolVersion:    protocolVersion,
