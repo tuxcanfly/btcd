@@ -339,6 +339,9 @@ func TestPeerListeners(t *testing.T) {
 			OnFilterLoad: func(p *peer.Peer, msg *wire.MsgFilterLoad) {
 				ok <- msg
 			},
+			OnMerkleBlock: func(p *peer.Peer, msg *wire.MsgMerkleBlock) {
+				ok <- msg
+			},
 			OnVersion: func(p *peer.Peer, msg *wire.MsgVersion) {
 				ok <- msg
 			},
@@ -455,6 +458,10 @@ func TestPeerListeners(t *testing.T) {
 		{
 			"OnFilterLoadMsg",
 			wire.NewMsgFilterLoad([]byte{0x01}, 10, 0, wire.BloomUpdateNone),
+		},
+		{
+			"OnMerkleBlockMsg",
+			wire.NewMsgMerkleBlock(wire.NewBlockHeader(&wire.ShaHash{}, &wire.ShaHash{}, 1, 1)),
 		},
 		// only one version message is allowed
 		// only one verack message is allowed
