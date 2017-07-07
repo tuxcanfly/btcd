@@ -669,7 +669,7 @@ mempoolLoop:
 
 		// Enforce maximum block size.  Also check for overflow.
 		txWeight := uint32(blockchain.GetTransactionWeight(tx))
-		blockPlusTxWeight := uint32(blockWeight + txWeight)
+		blockPlusTxWeight := blockWeight + txWeight
 		if blockPlusTxWeight < blockWeight ||
 			blockPlusTxWeight >= g.policy.BlockMaxWeight {
 
