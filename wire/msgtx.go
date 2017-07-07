@@ -777,7 +777,7 @@ func (msg *MsgTx) Serialize(w io.Writer) error {
 	return msg.BtcEncode(w, 0, WitnessEncoding)
 }
 
-// SerializeWitness encodes the transaction to w in an identical manner to
+// SerializeNoWitness encodes the transaction to w in an identical manner to
 // Serialize, however even if the source transaction has inputs with witness
 // data, the old serialization format will still be used.
 func (msg *MsgTx) SerializeNoWitness(w io.Writer) error {

@@ -115,7 +115,7 @@ func (msg *MsgBlock) Deserialize(r io.Reader) error {
 	return msg.BtcDecode(r, 0, WitnessEncoding)
 }
 
-// DeserializeWitness decodes a block from r into the receiver similar to
+// DeserializeNoWitness decodes a block from r into the receiver similar to
 // Deserialize, however DeserializeWitness strips all (if any) witness data
 // from the transactions within the block before encoding them.
 func (msg *MsgBlock) DeserializeNoWitness(r io.Reader) error {
@@ -214,8 +214,8 @@ func (msg *MsgBlock) Serialize(w io.Writer) error {
 	return msg.BtcEncode(w, 0, WitnessEncoding)
 }
 
-// SerializeWitness encodes a block to w using an identical format to Serialize,
-// with all (if any) witness data stripped from all transactions.
+// SerializeNoWitness encodes a block to w using an identical format to
+// Serialize, with all (if any) witness data stripped from all transactions.
 // This method is provided in additon to the regular Serialize, in order to
 // allow one to selectively encode transaction witness data to non-upgraded
 // peers which are unaware of the new encoding.
