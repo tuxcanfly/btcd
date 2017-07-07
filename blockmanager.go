@@ -923,14 +923,6 @@ func (b *blockManager) handleInvMsg(imsg *invMsg) {
 		}
 	}
 
-	// Fetch the current BIP9 state for segwit to determine if it's
-	// currently active or not.
-	segwitActive, err := b.chain.IsDeploymentActive(chaincfg.DeploymentSegwit)
-	if err != nil {
-		bmgrLog.Errorf("Unable to query for segwit "+
-			"soft-fork state: %v", err)
-	}
-
 	// Request the advertised inventory if we don't already have it.  Also,
 	// request parent blocks of orphans if we receive one we already have.
 	// Finally, attempt to detect potential stalls due to long side chains
@@ -976,8 +968,7 @@ func (b *blockManager) handleInvMsg(imsg *invMsg) {
 			// peers, as after segwit activation we only want to
 			// download from peers that can provide us full witness
 			// data for blocks.
-			if segwitActive && !imsg.peer.IsWitnessEnabled() &&
-				iv.Type == wire.InvTypeBlock {
+			if !imsg.peer.IsWitnessEnabled() && iv.Type == wire.InvTypeBlock {
 				continue
 			}
 
@@ -1048,7 +1039,7 @@ func (b *blockManager) handleInvMsg(imsg *invMsg) {
 				b.limitMap(b.requestedBlocks, maxRequestedBlocks)
 				imsg.peer.requestedBlocks[iv.Hash] = struct{}{}
 
-				if segwitActive && imsg.peer.IsWitnessEnabled() {
+				if imsg.peer.IsWitnessEnabled() {
 					iv.Type = wire.InvTypeWitnessBlock
 				}
 
@@ -1068,7 +1059,7 @@ func (b *blockManager) handleInvMsg(imsg *invMsg) {
 
 				// If the peer is capable, request the txn
 				// including all witness data.
-				if segwitActive && imsg.peer.IsWitnessEnabled() {
+				if imsg.peer.IsWitnessEnabled() {
 					iv.Type = wire.InvTypeWitnessTx
 				}
 
