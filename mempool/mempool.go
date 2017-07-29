@@ -613,15 +613,15 @@ func (mp *TxPool) FetchTransaction(txHash *chainhash.Hash) (*btcutil.Tx, error) 
 func (mp *TxPool) maybeAcceptTransaction(tx *btcutil.Tx, isNew, rateLimit, rejectDupOrphans bool) ([]*chainhash.Hash, *TxDesc, error) {
 	txHash := tx.Hash()
 
+	segwitActive, err := mp.cfg.IsDeploymentActive(chaincfg.DeploymentSegwit)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// If a transaction has iwtness data, and segwit isn't active yet, If
 	// segwit isn't active yet, then we won't accept it into the mempool as
 	// it can't be mined yet.
 	if tx.MsgTx().HasWitness() {
-		segwitActive, err := mp.cfg.IsDeploymentActive(chaincfg.DeploymentSegwit)
-		if err != nil {
-			return nil, nil, err
-		}
-
 		if !segwitActive {
 			str := fmt.Sprintf("transaction %v has witness data, "+
 				"but segwit isn't active yet", txHash)
@@ -805,8 +805,7 @@ func (mp *TxPool) maybeAcceptTransaction(tx *btcutil.Tx, isNew, rateLimit, rejec
 	// the coinbase address itself can contain signature operations, the
 	// maximum allowed signature operations per transaction is less than
 	// the maximum allowed signature operations per block.
-	// TODO(roasbeef): last bool should be conditional on segwit activation
-	sigOpCost, err := blockchain.GetSigOpCost(tx, false, utxoView, true, true)
+	sigOpCost, err := blockchain.GetSigOpCost(tx, false, utxoView, true, segwitActive)
 	if err != nil {
 		if cerr, ok := err.(blockchain.RuleError); ok {
 			return nil, nil, chainRuleError(cerr)
