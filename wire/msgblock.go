@@ -224,28 +224,14 @@ func (msg *MsgBlock) SerializeNoWitness(w io.Writer) error {
 }
 
 // SerializeSize returns the number of bytes it would take to serialize the
-// block, factoring in any witness data within transaction.
-func (msg *MsgBlock) SerializeSize() int {
+// block. If encoding is WitnessEncoding, witness data will be factored in.
+func (msg *MsgBlock) SerializeSize(encoding MessageEncoding) int {
 	// Block header bytes + Serialized varint size for the number of
 	// transactions.
 	n := blockHeaderLen + VarIntSerializeSize(uint64(len(msg.Transactions)))
 
 	for _, tx := range msg.Transactions {
-		n += tx.SerializeSize()
-	}
-
-	return n
-}
-
-// SerializeSizeStripped returns the number of bytes it would take to serialize
-// the block, excluding any witness data (if any).
-func (msg *MsgBlock) SerializeSizeStripped() int {
-	// Block header bytes + Serialized varint size for the number of
-	// transactions.
-	n := blockHeaderLen + VarIntSerializeSize(uint64(len(msg.Transactions)))
-
-	for _, tx := range msg.Transactions {
-		n += tx.SerializeSizeStripped()
+		n += tx.SerializeSize(encoding)
 	}
 
 	return n

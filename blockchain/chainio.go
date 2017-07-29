@@ -1091,7 +1091,7 @@ func (b *BlockChain) createChainState() error {
 	// Initialize the state related to the best block.  Since it is the
 	// genesis block, use its timestamp for the median time.
 	numTxns := uint64(len(genesisBlock.MsgBlock().Transactions))
-	blockSize := uint64(genesisBlock.MsgBlock().SerializeSize())
+	blockSize := uint64(genesisBlock.MsgBlock().SerializeSize(wire.BaseEncoding))
 	blockWeight := uint64(GetBlockWeight(genesisBlock))
 	b.stateSnapshot = newBestState(b.bestNode, blockSize, blockWeight,
 		numTxns, numTxns, time.Unix(b.bestNode.timestamp, 0))

@@ -742,7 +742,7 @@ func createTxRawResult(chainParams *chaincfg.Params, mtx *wire.MsgTx,
 		Hex:      mtxHex,
 		Txid:     txHash,
 		Hash:     mtx.WitnessHash().String(),
-		Size:     int32(mtx.SerializeSize()),
+		Size:     int32(mtx.SerializeSize(wire.BaseEncoding)),
 		Vsize:    int32(mempool.GetTxVirtualSize(btcutil.NewTx(mtx))),
 		Vin:      createVinList(mtx),
 		Vout:     createVoutList(mtx, chainParams, nil),
@@ -1094,7 +1094,7 @@ func handleGetBlock(s *rpcServer, cmd interface{}, closeChan <-chan struct{}) (i
 		Confirmations: uint64(1 + best.Height - blockHeight),
 		Height:        int64(blockHeight),
 		Size:          int32(len(blkBytes)),
-		StrippedSize:  int32(blk.MsgBlock().SerializeSizeStripped()),
+		StrippedSize:  int32(blk.MsgBlock().SerializeSize(wire.WitnessEncoding)),
 		Weight:        int32(blockchain.GetBlockWeight(blk)),
 		Bits:          strconv.FormatInt(int64(blockHeader.Bits), 16),
 		Difficulty:    getDifficultyRatio(blockHeader.Bits),
@@ -1674,7 +1674,7 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 		}
 
 		// Serialize the transaction for later conversion to hex.
-		txBuf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize()))
+		txBuf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize(wire.BaseEncoding)))
 		if err := tx.Serialize(txBuf); err != nil {
 			context := "Failed to serialize transaction"
 			return nil, internalRPCError(err.Error(), context)
@@ -1741,7 +1741,7 @@ func (state *gbtWorkState) blockTemplateResult(useCoinbaseValue bool, submitOld 
 
 		// Serialize the transaction for conversion to hex.
 		tx := msgBlock.Transactions[0]
-		txBuf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize()))
+		txBuf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize(wire.BaseEncoding)))
 		if err := tx.Serialize(txBuf); err != nil {
 			context := "Failed to serialize transaction"
 			return nil, internalRPCError(err.Error(), context)
@@ -2236,7 +2236,7 @@ func handleGetMempoolInfo(s *rpcServer, cmd interface{}, closeChan <-chan struct
 
 	var numBytes int64
 	for _, txD := range mempoolTxns {
-		numBytes += int64(txD.Tx.MsgTx().SerializeSize())
+		numBytes += int64(txD.Tx.MsgTx().SerializeSize(wire.BaseEncoding))
 	}
 
 	ret := &btcjson.GetMempoolInfoResult{

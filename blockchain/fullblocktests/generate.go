@@ -703,7 +703,7 @@ func (g *testGenerator) assertTipBlockSigOpsCount(expected int) {
 // assertTipBlockSize panics if the if the current tip block associated with the
 // generator does not have the specified size when serialized.
 func (g *testGenerator) assertTipBlockSize(expected int) {
-	serializeSize := g.tip.SerializeSize()
+	serializeSize := g.tip.SerializeSize(wire.BaseEncoding)
 	if serializeSize != expected {
 		panic(fmt.Sprintf("block size of block %q (height %d) is %d "+
 			"instead of expected %d", g.tipName, g.tipHeight,
@@ -1124,7 +1124,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//   ... -> b15(5) -> b23(6)
 	g.setTip("b15")
 	g.nextBlock("b23", outs[6], func(b *wire.MsgBlock) {
-		bytesToMaxSize := maxBlockSize - b.SerializeSize() - 3
+		bytesToMaxSize := maxBlockSize - b.SerializeSize(wire.BaseEncoding) - 3
 		sizePadScript := repeatOpcode(0x00, bytesToMaxSize)
 		replaceSpendScript(sizePadScript)(b)
 	})
@@ -1138,7 +1138,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//                \-> b24(6) -> b25(7)
 	g.setTip("b15")
 	g.nextBlock("b24", outs[6], func(b *wire.MsgBlock) {
-		bytesToMaxSize := maxBlockSize - b.SerializeSize() - 3
+		bytesToMaxSize := maxBlockSize - b.SerializeSize(wire.BaseEncoding) - 3
 		sizePadScript := repeatOpcode(0x00, bytesToMaxSize+1)
 		replaceSpendScript(sizePadScript)(b)
 	})
@@ -1772,7 +1772,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	//                 \-> b64a(18)
 	g.setTip("b60")
 	b64a := g.nextBlock("b64a", outs[18], func(b *wire.MsgBlock) {
-		bytesToMaxSize := maxBlockSize - b.SerializeSize() - 3
+		bytesToMaxSize := maxBlockSize - b.SerializeSize(wire.BaseEncoding) - 3
 		sizePadScript := repeatOpcode(0x00, bytesToMaxSize)
 		replaceSpendScript(sizePadScript)(b)
 	})
@@ -2073,7 +2073,7 @@ func Generate(includeLargeReorg bool) (tests [][]TestInstance, err error) {
 	for i := int32(0); i < numLargeReorgBlocks; i++ {
 		chain1TipName = fmt.Sprintf("br%d", i)
 		g.nextBlock(chain1TipName, &reorgSpend, func(b *wire.MsgBlock) {
-			bytesToMaxSize := maxBlockSize - b.SerializeSize() - 3
+			bytesToMaxSize := maxBlockSize - b.SerializeSize(wire.BaseEncoding) - 3
 			sizePadScript := repeatOpcode(0x00, bytesToMaxSize)
 			replaceSpendScript(sizePadScript)(b)
 		})

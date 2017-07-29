@@ -473,7 +473,7 @@ func TestBlockSerializeSize(t *testing.T) {
 
 	t.Logf("Running %d tests", len(tests))
 	for i, test := range tests {
-		serializedSize := test.in.SerializeSize()
+		serializedSize := test.in.SerializeSize(BaseEncoding)
 		if serializedSize != test.size {
 			t.Errorf("MsgBlock.SerializeSize: #%d got: %d, want: "+
 				"%d", i, serializedSize, test.size)

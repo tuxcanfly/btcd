@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 )
 
@@ -43,8 +44,8 @@ const (
 func GetBlockWeight(blk *btcutil.Block) int64 {
 	msgBlock := blk.MsgBlock()
 
-	baseSize := msgBlock.SerializeSizeStripped()
-	totalSize := msgBlock.SerializeSize()
+	baseSize := msgBlock.SerializeSize(wire.WitnessEncoding)
+	totalSize := msgBlock.SerializeSize(wire.BaseEncoding)
 
 	// (baseSize * 3) + totalSize
 	return int64((baseSize * (WitnessScaleFactor - 1)) + totalSize)
@@ -58,8 +59,8 @@ func GetBlockWeight(blk *btcutil.Block) int64 {
 func GetTransactionWeight(tx *btcutil.Tx) int64 {
 	msgTx := tx.MsgTx()
 
-	baseSize := msgTx.SerializeSizeStripped()
-	totalSize := msgTx.SerializeSize()
+	baseSize := msgTx.SerializeSize(wire.WitnessEncoding)
+	totalSize := msgTx.SerializeSize(wire.BaseEncoding)
 
 	// (baseSize * 3) + totalSize
 	return int64((baseSize * (WitnessScaleFactor - 1)) + totalSize)

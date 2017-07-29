@@ -939,7 +939,7 @@ func (*wsNotificationManager) removeSpentRequest(ops map[wire.OutPoint]map[chan 
 
 // txHexString returns the serialized transaction encoded in hexadecimal.
 func txHexString(tx *wire.MsgTx) string {
-	buf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize()))
+	buf := bytes.NewBuffer(make([]byte, 0, tx.SerializeSize(wire.BaseEncoding)))
 	// Ignore Serialize's error, as writing to a bytes.buffer cannot fail.
 	tx.Serialize(buf)
 	return hex.EncodeToString(buf.Bytes())

@@ -309,7 +309,7 @@ func (msg *MsgTx) TxHash() chainhash.Hash {
 	// Ignore the error returns since the only way the encode could fail
 	// is being out of memory or due to nil pointers, both of which would
 	// cause a run-time panic.
-	buf := bytes.NewBuffer(make([]byte, 0, msg.SerializeSizeStripped()))
+	buf := bytes.NewBuffer(make([]byte, 0, msg.SerializeSize(WitnessEncoding)))
 	_ = msg.SerializeNoWitness(buf)
 	return chainhash.DoubleHashH(buf.Bytes())
 }
@@ -321,7 +321,7 @@ func (msg *MsgTx) TxHash() chainhash.Hash {
 // is the same as its txid.
 func (msg *MsgTx) WitnessHash() chainhash.Hash {
 	if msg.HasWitness() {
-		buf := bytes.NewBuffer(make([]byte, 0, msg.SerializeSize()))
+		buf := bytes.NewBuffer(make([]byte, 0, msg.SerializeSize(BaseEncoding)))
 		_ = msg.Serialize(buf)
 		return chainhash.DoubleHashH(buf.Bytes())
 	}
@@ -804,9 +804,12 @@ func (msg *MsgTx) baseSize() int {
 }
 
 // SerializeSize returns the number of bytes it would take to serialize the
-// the transaction.
-func (msg *MsgTx) SerializeSize() int {
+// the transaction. if encoding is WitnessEncoding, witness data will be factored in.
+func (msg *MsgTx) SerializeSize(encoding MessageEncoding) int {
 	n := msg.baseSize()
+	if encoding == BaseEncoding {
+		return n
+	}
 
 	if msg.HasWitness() {
 		// The marker, and flag fields take up two additional bytes.
@@ -820,12 +823,6 @@ func (msg *MsgTx) SerializeSize() int {
 	}
 
 	return n
-}
-
-// SerializeSizeStripped returns the number of bytes it would take to serialize
-// the transaction, excluding any included witness data.
-func (msg *MsgTx) SerializeSizeStripped() int {
-	return msg.baseSize()
 }
 
 // Command returns the protocol command string for the message.  This is part

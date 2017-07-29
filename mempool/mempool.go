@@ -342,7 +342,7 @@ func (mp *TxPool) maybeAddOrphan(tx *btcutil.Tx, tag Tag) error {
 	// also limited, so this equates to a maximum memory used of
 	// mp.cfg.Policy.MaxOrphanTxSize * mp.cfg.Policy.MaxOrphanTxs (which is ~5MB
 	// using the default values at the time this comment was written).
-	serializedLen := tx.MsgTx().SerializeSize()
+	serializedLen := tx.MsgTx().SerializeSize(wire.BaseEncoding)
 	if serializedLen > mp.cfg.Policy.MaxOrphanTxSize {
 		str := fmt.Sprintf("orphan transaction size of %d bytes is "+
 			"larger than max allowed size of %d bytes",
@@ -523,7 +523,7 @@ func (mp *TxPool) addTransaction(utxoView *blockchain.UtxoViewpoint, tx *btcutil
 			Added:    time.Now(),
 			Height:   height,
 			Fee:      fee,
-			FeePerKB: fee * 1000 / int64(tx.MsgTx().SerializeSize()),
+			FeePerKB: fee * 1000 / int64(tx.MsgTx().SerializeSize(wire.BaseEncoding)),
 		},
 		StartingPriority: mining.CalcPriority(tx.MsgTx(), utxoView, height),
 	}
@@ -1175,7 +1175,7 @@ func (mp *TxPool) RawMempoolVerbose() map[string]*btcjson.GetRawMempoolVerboseRe
 		}
 
 		mpd := &btcjson.GetRawMempoolVerboseResult{
-			Size:             int32(tx.MsgTx().SerializeSize()),
+			Size:             int32(tx.MsgTx().SerializeSize(wire.BaseEncoding)),
 			Vsize:            int32(GetTxVirtualSize(tx)),
 			Fee:              btcutil.Amount(desc.Fee).ToBTC(),
 			Time:             desc.Added.Unix(),

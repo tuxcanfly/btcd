@@ -123,7 +123,7 @@ func CalcPriority(tx *wire.MsgTx, utxoView *blockchain.UtxoViewpoint, nextBlockH
 		overhead += 41 + minInt(110, len(txIn.SignatureScript))
 	}
 
-	serializedTxSize := tx.SerializeSize()
+	serializedTxSize := tx.SerializeSize(wire.BaseEncoding)
 	if overhead >= serializedTxSize {
 		return 0.0
 	}
